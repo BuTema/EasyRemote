@@ -1,0 +1,137 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  agent-linux:
+    # Built on Ubuntu 22.04 on purpose: the binary then needs glibc >= 2.35 only, so it runs on
+    # Linux Mint 21.x / 22.x / LMDE 6, Ubuntu 22.04+, Debian 12+, Fedora, ... (a build on a newer
+    # runner would refuse to start on older distributions).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+      - name: Test
+        working-directory: agent
+        run: cargo test --locked
+      - name: Build release
+        working-directory: agent
+        run: cargo build --release --locked
+      - name: Check glibc compatibility (must be <= 2.35)
+        run: |
+          max=$(objdump -T agent/target/release/easyremote agent/target/release/easyremoted \
+                | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -Vu | tail -1)
+          echo "highest glibc symbol required: $max"
+          test "$(printf '%s\n' 2.35 "$max" | sort -V | tail -1)" = "2.35"
+      - name: Package (.deb and .tar.gz)
+        run: |
+          version=$(grep -m1 '^version' agent/Cargo.toml | cut -d'"' -f2)
+          mkdir -p out dist/easyremote-linux-x86_64
+          packaging/linux/build-deb.sh "$version" agent/target/release out
+          cp agent/target/release/easyremote agent/target/release/easyremoted dist/easyremote-linux-x86_64/
+          cp packaging/linux/install.sh README.md PROTOCOL.md LICENSE dist/easyremote-linux-x86_64/
+          tar -C dist -czf out/easyremote-linux-x86_64.tar.gz easyremote-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyremote-linux
+          path: out/*
+
+  agent-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+      - name: Test
+        working-directory: agent
+        run: cargo test --locked
+      - name: Build release
+        working-directory: agent
+        run: cargo build --release --locked
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/easyremote-windows-x86_64 | Out-Null
+          Copy-Item agent/target/release/easyremote.exe, agent/target/release/easyremoted.exe dist/easyremote-windows-x86_64/
+          Copy-Item packaging/windows/install.ps1 dist/easyremote-windows-x86_64/
+          Copy-Item README.md, PROTOCOL.md, LICENSE dist/easyremote-windows-x86_64/
+          Compress-Archive -Path dist/easyremote-windows-x86_64 -DestinationPath easyremote-windows-x86_64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyremote-windows
+          path: easyremote-windows-x86_64.zip
+
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Make wrapper executable
+        run: chmod +x gradlew
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+      - name: Build release APK (minified, debug-signed)
+        id: release_apk
+        continue-on-error: true
+        run: ./gradlew assembleRelease
+      - name: Collect APKs
+        run: |
+          mkdir -p ../apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../apk/EasyRemote-debug.apk
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk ../apk/EasyRemote.apk
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyremote-android
+          path: apk/*.apk
+
+  release:
+    # Publishes everything on the repository's Releases page, so the APK can be downloaded straight
+    # onto the phone: a rolling "latest" pre-release on every push to main, and a normal release for
+    # tags like v0.1.0.
+    needs: [agent-linux, agent-windows, android]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Move the rolling "latest" tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag -f latest
+          git push -f origin latest
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Latest build' }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          files: dist/*
+          body: |
+            **Phone:** install `EasyRemote.apk` (or `EasyRemote-debug.apk`).
+            **Linux Mint / Ubuntu / Debian:** `sudo apt install ./easyremote_*_amd64.deb`, then `easyremote autostart on` and `easyremote pair`.
+            **Windows:** unzip `easyremote-windows-x86_64.zip` and run `install.ps1`.

@@ -1,0 +1,52 @@
+[package]
+name = "easyremote-agent"
+version = "0.1.0"
+edition = "2021"
+description = "EasyRemote PC agent: lightweight LAN service that lets the EasyRemote phone app control this computer"
+license = "MIT"
+
+[lib]
+name = "easyremote"
+path = "src/lib.rs"
+
+[[bin]]
+name = "easyremote"
+path = "src/bin/easyremote.rs"
+
+[[bin]]
+name = "easyremoted"
+path = "src/bin/easyremoted.rs"
+
+[dependencies]
+dirs = "7.0.0"
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+gethostname = "1.1.0"
+hex = "0.4.3"
+hmac = "0.13.0"
+mdns-sd = "0.21.7"
+qrcode = { version = "0.14.1", default-features = false }
+rand = "0.8"
+rcgen = "0.14.10"
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "net", "sync", "time", "macros", "io-util", "signal"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.13.2"
+
+[target."cfg(windows)".dependencies]
+windows = { version = "0.62.2", default-features = false, features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Foundation"] }
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["rt-multi-thread"] }

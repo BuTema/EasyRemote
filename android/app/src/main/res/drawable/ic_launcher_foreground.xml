@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- touchpad -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:pathData="M30,34 h48 a6,6 0 0 1 6,6 v28 a6,6 0 0 1 -6,6 h-48 a6,6 0 0 1 -6,-6 v-28 a6,6 0 0 1 6,-6 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,72 h22 v2 h-22 z M56,72 h22 v2 h-22 z" />
+    <!-- pointer -->
+    <path
+        android:fillColor="#7CC4FF"
+        android:strokeColor="#1B3A5C"
+        android:strokeWidth="1.5"
+        android:pathData="M50,44 L50,64 L55,59 L59,68 L63,66 L59,57 L66,57 Z" />
+</vector>

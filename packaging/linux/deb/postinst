@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    # /dev/uinput lets the agent create a virtual mouse + keyboard
+    modprobe uinput 2>/dev/null || true
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload-rules 2>/dev/null || true
+        udevadm trigger --subsystem-match=misc --sysname-match=uinput 2>/dev/null || true
+    fi
+    # Linux Mint ships ufw switched off; if somebody turned it on, let the phone in.
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+        ufw allow 47821/tcp >/dev/null 2>&1 || true
+        ufw allow 5353/udp >/dev/null 2>&1 || true
+    fi
+    echo "EasyRemote installed. As your normal user (not root) run:"
+    echo "    easyremote autostart on"
+    echo "    easyremote pair"
+fi
+exit 0
