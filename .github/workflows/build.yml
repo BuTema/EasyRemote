@@ -97,6 +97,7 @@ jobs:
           EASYREMOTE_KEYSTORE_PASSWORD: ${{ secrets.EASYREMOTE_KEYSTORE_PASSWORD }}
           EASYREMOTE_KEY_ALIAS: ${{ secrets.EASYREMOTE_KEY_ALIAS }}
           EASYREMOTE_KEY_PASSWORD: ${{ secrets.EASYREMOTE_KEY_PASSWORD }}
+          EASYREMOTE_VERSION_CODE: ${{ github.run_number }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
@@ -105,7 +106,7 @@ jobs:
           else
             echo "No keystore secret: signing with the debug key"
           fi
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease bundleRelease
       - name: Collect APKs
         run: |
           mkdir -p ../apk
@@ -113,10 +114,15 @@ jobs:
           if [ -f app/build/outputs/apk/release/app-release.apk ]; then
             cp app/build/outputs/apk/release/app-release.apk ../apk/EasyRemote.apk
           fi
+          if [ -f app/build/outputs/bundle/release/app-release.aab ]; then
+            cp app/build/outputs/bundle/release/app-release.aab ../apk/EasyRemote.aab
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: easyremote-android
-          path: apk/*.apk
+          path: |
+            apk/*.apk
+            apk/*.aab
 
   flatpak:
     # Packages the Linux binaries built above as a Flatpak bundle. Marked non-blocking so a Flatpak

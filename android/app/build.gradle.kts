@@ -6,13 +6,14 @@ plugins {
 
 android {
     namespace = "com.artem.easyremote"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.artem.easyremote"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 1
+        targetSdk = 36
+        // Play needs a higher versionCode for every upload; CI passes the run number.
+        versionCode = (System.getenv("EASYREMOTE_VERSION_CODE") ?: "1").toInt()
         versionName = "0.1.0"
     }
 
