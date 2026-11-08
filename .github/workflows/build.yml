@@ -176,6 +176,10 @@ jobs:
     # run even when the (non-blocking) Flatpak job failed
     if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.agent-linux.result == 'success' && needs.agent-windows.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-latest
+    # one release run at a time: two pushes in a row would otherwise race on the same "latest" release
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
