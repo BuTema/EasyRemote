@@ -178,14 +178,17 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Move the rolling "latest" tag
+      - name: Remove the previous rolling "latest" release and tag
+        # The tag is recreated by the release step below through the API. Pushing it with git is
+        # refused for GITHUB_TOKEN because the commit contains workflow files.
         if: github.ref == 'refs/heads/main'
-        run: |
-          git tag -f latest
-          git push -f origin latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete latest --cleanup-tag --yes || true
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          target_commitish: ${{ github.sha }}
           name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Latest build' }}
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: dist/*
