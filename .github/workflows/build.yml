@@ -89,10 +89,23 @@ jobs:
         run: ./gradlew testDebugUnitTest
       - name: Build debug APK
         run: ./gradlew assembleDebug
-      - name: Build release APK (minified, debug-signed)
+      - name: Build release APK (minified; signed with your key if the secrets exist, else debug key)
         id: release_apk
         continue-on-error: true
-        run: ./gradlew assembleRelease
+        env:
+          KEYSTORE_B64: ${{ secrets.EASYREMOTE_KEYSTORE_B64 }}
+          EASYREMOTE_KEYSTORE_PASSWORD: ${{ secrets.EASYREMOTE_KEYSTORE_PASSWORD }}
+          EASYREMOTE_KEY_ALIAS: ${{ secrets.EASYREMOTE_KEY_ALIAS }}
+          EASYREMOTE_KEY_PASSWORD: ${{ secrets.EASYREMOTE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export EASYREMOTE_KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+            echo "Signing with the release keystore"
+          else
+            echo "No keystore secret: signing with the debug key"
+          fi
+          ./gradlew assembleRelease
       - name: Collect APKs
         run: |
           mkdir -p ../apk

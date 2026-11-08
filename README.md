@@ -76,5 +76,17 @@ cd android && ./gradlew testDebugUnitTest assembleDebug    # JDK 17, Android SDK
 * **Not yet run on real hardware:** Windows input injection and volume (Core Audio), Linux `/dev/uinput` injection (including on Mint), the Flatpak itself, and the whole Android app. They were written against the platform APIs and are compiled by CI, but the first real-device run may need small fixes. The shared protocol/pairing vectors are asserted on both the Rust and the Kotlin side.
 * Linux typing of non-ASCII characters (e.g. Ukrainian) pastes through the clipboard (Ctrl+V), so `xclip` or `xsel` (X11; Mint ships `xsel`) or `wl-clipboard` (Wayland) must be installed, and terminal windows, which paste with Ctrl+Shift+V, will not receive such characters. Plain English letters and digits are typed as real key presses everywhere. Windows types every character directly.
 * The QR scanner uses Google Play services' code scanner; without Play services use the manual entry.
-* The release APK is signed with the debug key so it installs directly; use your own keystore before distributing it.
+* The release APK is signed with your own key when the `EASYREMOTE_KEYSTORE_B64`, `EASYREMOTE_KEYSTORE_PASSWORD`, `EASYREMOTE_KEY_ALIAS` and `EASYREMOTE_KEY_PASSWORD` repository secrets exist (see README "Signing"); otherwise with the debug key.
 * Only IPv4 addresses are used. Guest Wi-Fi or "client isolation" networks block phone-to-PC traffic by design.
+
+## Signing the APK with your own key
+
+Android only requires that an APK is signed, and updates only install over an app signed with the *same* key. Make the key once and keep it safe (if you lose it, users must uninstall and reinstall):
+
+```
+keytool -genkeypair -v -keystore easyremote.jks -alias easyremote -keyalg RSA -keysize 4096 -validity 36500
+base64 -w0 easyremote.jks      # copy the output
+```
+
+Then in the GitHub repo: Settings → Secrets and variables → Actions → New repository secret:
+`EASYREMOTE_KEYSTORE_B64` (the base64 text), `EASYREMOTE_KEYSTORE_PASSWORD`, `EASYREMOTE_KEY_ALIAS` (`easyremote`), `EASYREMOTE_KEY_PASSWORD`. The next build signs `EasyRemote.apk` with it. Never commit the `.jks` file. `EasyRemote-debug.apk` always uses the debug key.

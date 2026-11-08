@@ -16,14 +16,28 @@ android {
         versionName = "0.1.0"
     }
 
+    // Release signing: when the four EASYREMOTE_* variables are set (CI reads them from GitHub
+    // secrets) the APK is signed with your own key; otherwise it falls back to the debug key so
+    // local builds still work.
+    val ksFile = System.getenv("EASYREMOTE_KEYSTORE_FILE")
+    val ownKey = !ksFile.isNullOrBlank() && file(ksFile).exists()
+    if (ownKey) {
+        signingConfigs {
+            create("own") {
+                storeFile = file(ksFile!!)
+                storePassword = System.getenv("EASYREMOTE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("EASYREMOTE_KEY_ALIAS")
+                keyPassword = System.getenv("EASYREMOTE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so the APK installs directly. Replace with your own
-            // keystore before publishing anywhere.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (ownKey) "own" else "debug")
         }
     }
 
