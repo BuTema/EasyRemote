@@ -1,6 +1,6 @@
 //! `easyremote` — command-line control for the EasyRemote agent.
 
-use easyremote::{autostart, config, discovery, pairing};
+use easyremote::{autostart, config, discovery, hostenv, pairing};
 
 const HELP: &str = "\
 EasyRemote — control this PC from your phone
@@ -11,6 +11,7 @@ USAGE:
   easyremote revoke <id|name|all> Remove a paired phone
   easyremote status               Show name, address, fingerprint
   easyremote autostart on|off     Start the agent automatically at login
+  easyremote host-setup           Print the one-time computer setup script (use:  easyremote host-setup | sudo sh)
   easyremote run                  Run the agent in this terminal (same as easyremoted -f)
 ";
 
@@ -90,6 +91,11 @@ fn run(args: &[String]) -> Result<(), String> {
             Some("off") => autostart::disable().map(|m| println!("{m}")),
             _ => Err("usage: easyremote autostart on|off".into()),
         },
+        "host-setup" => {
+            // plain script on stdout only, so that it can be piped straight into `sudo sh`
+            print!("{}", hostenv::HOST_SETUP_SCRIPT);
+            Ok(())
+        }
         "run" => easyremote::daemon::run(false, true),
         _ => {
             print!("{HELP}");

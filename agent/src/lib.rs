@@ -9,6 +9,7 @@ pub mod autostart;
 pub mod config;
 pub mod daemon;
 pub mod discovery;
+pub mod hostenv;
 pub mod input;
 pub mod pairing;
 pub mod proto;

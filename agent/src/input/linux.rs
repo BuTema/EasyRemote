@@ -2,6 +2,7 @@
 //! volume through `pactl` (PulseAudio / PipeWire) or `wpctl`, with media-key fallback.
 
 use super::{InputBackend, VolumeState};
+use crate::hostenv::{flatpak_id, host_command, in_flatpak};
 use crate::proto::{Button, Key, Media};
 use evdev::{uinput::VirtualDevice, AttributeSet, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use std::io::Write;
@@ -32,8 +33,17 @@ impl LinuxInput {
             RelativeAxisCode::REL_WHEEL_HI_RES,
             RelativeAxisCode::REL_HWHEEL_HI_RES,
         ]);
-        let hint = "cannot open /dev/uinput. Install the .deb package (or run packaging/linux/install.sh), \
-                    which loads the uinput module and adds a udev rule for it, then log out and in once";
+        let hint = if in_flatpak() {
+            format!(
+                "cannot open /dev/uinput. Run once on the computer (asks for your password), then log out and in: \
+                 flatpak run {} host-setup | sudo sh",
+                flatpak_id()
+            )
+        } else {
+            "cannot open /dev/uinput. Install the .deb package (or run packaging/linux/install.sh), \
+             which loads the uinput module and adds a udev rule for it, then log out and in once"
+                .to_string()
+        };
         let dev = VirtualDevice::builder()
             .map_err(|e| format!("{hint}: {e}"))?
             .name("EasyRemote virtual input")
@@ -163,14 +173,15 @@ fn desktop_env(cmd: &mut Command) {
 }
 
 fn set_clipboard(s: &str) -> bool {
-    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
+        || std::env::var("XDG_SESSION_TYPE").map(|t| t == "wayland").unwrap_or(false);
     let order: [(&str, &[&str]); 3] = if wayland {
         [("wl-copy", &[]), ("xclip", &["-selection", "clipboard"]), ("xsel", &["-ib"])]
     } else {
         [("xclip", &["-selection", "clipboard"]), ("xsel", &["-ib"]), ("wl-copy", &[])]
     };
     for (cmd, args) in order {
-        let mut command = Command::new(cmd);
+        let mut command = host_command(cmd);
         desktop_env(&mut command);
         let spawned = command
             .args(args)
@@ -181,9 +192,14 @@ fn set_clipboard(s: &str) -> bool {
         if let Ok(mut child) = spawned {
             if let Some(mut stdin) = child.stdin.take() {
                 let _ = stdin.write_all(s.as_bytes());
+            } // stdin is closed here so the tool sees end of input
+            // These tools put themselves in the background once they own the clipboard and then
+            // exit with 0. A non-zero status (not installed, no display) means: try the next tool.
+            if let Ok(status) = child.wait() {
+                if status.success() {
+                    return true;
+                }
             }
-            let _ = child.wait();
-            return true;
         }
     }
     false
@@ -192,7 +208,7 @@ fn set_clipboard(s: &str) -> bool {
 // ------------------------------------------------------------------ volume helpers
 
 fn run(cmd: &str, args: &[&str]) -> Option<String> {
-    let out = Command::new(cmd).args(args).stderr(Stdio::null()).output().ok()?;
+    let out = host_command(cmd).args(args).stderr(Stdio::null()).output().ok()?;
     if !out.status.success() {
         return None;
     }

@@ -46,7 +46,24 @@ pub fn disable() -> Result<String, String> {
 
 #[cfg(target_os = "linux")]
 fn desktop_path() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("autostart/easyremote.desktop")
+    // Inside a Flatpak, XDG_CONFIG_HOME points at the app's private directory. The real login
+    // autostart folder is reached through the `xdg-config/autostart` permission in the manifest.
+    let base = if crate::hostenv::in_flatpak() {
+        dirs::home_dir().map(|h| h.join(".config")).unwrap_or_else(|| PathBuf::from("."))
+    } else {
+        dirs::config_dir().unwrap_or_else(|| PathBuf::from("."))
+    };
+    base.join("autostart/easyremote.desktop")
+}
+
+/// What the login entry runs. Flatpak: start the daemon through `flatpak run` (on the host).
+#[cfg(target_os = "linux")]
+fn exec_line(daemon: &std::path::Path) -> String {
+    if crate::hostenv::in_flatpak() {
+        format!("flatpak run --command=easyremoted {}", crate::hostenv::flatpak_id())
+    } else {
+        format!("\"{}\"", daemon.display())
+    }
 }
 
 /// Linux uses an XDG autostart entry (`~/.config/autostart`). Unlike a systemd user service it is run
@@ -59,8 +76,8 @@ pub fn enable() -> Result<String, String> {
     std::fs::create_dir_all(desktop.parent().unwrap()).map_err(|e| e.to_string())?;
     let text = format!(
         "[Desktop Entry]\nType=Application\nName=EasyRemote\nComment=Control this PC from your phone\n\
-         Exec=\"{}\"\nTerminal=false\nNoDisplay=true\nX-GNOME-Autostart-enabled=true\n",
-        daemon.display()
+         Exec={}\nTerminal=false\nNoDisplay=true\nX-GNOME-Autostart-enabled=true\n",
+        exec_line(&daemon)
     );
     std::fs::write(&desktop, text).map_err(|e| e.to_string())?;
 
@@ -91,6 +108,13 @@ pub fn enable() -> Result<String, String> {
 #[cfg(target_os = "linux")]
 pub fn disable() -> Result<String, String> {
     let _ = std::fs::remove_file(desktop_path());
+    if crate::hostenv::in_flatpak() {
+        // Each Flatpak run is its own process namespace, so the running agent cannot be signalled from here.
+        return Ok(format!(
+            "Autostart removed. To stop the running agent now, run: flatpak kill {}",
+            crate::hostenv::flatpak_id()
+        ));
+    }
     let _ = Command::new("pkill").args(["-x", "easyremoted"]).output();
     Ok("Autostart removed and the agent stopped.".into())
 }
