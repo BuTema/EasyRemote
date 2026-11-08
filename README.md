@@ -21,17 +21,23 @@ EasyRemote/
 
 ## Install
 
-**1. Get the builds.** Everything is built by GitHub Actions. Open the repository's **Releases** page → *Latest build*, which has `EasyRemote.apk` (phone), `easyremote_<version>_amd64.deb` (Linux Mint / Ubuntu / Debian), `easyremote-linux-x86_64.tar.gz` (other distros) and `easyremote-windows-x86_64.zip`.
+**1. Get the builds.** Everything is built by GitHub Actions. Open the repository's **Releases** page → *Latest build*, which has `EasyRemote.apk` (phone), `easyremote.flatpak` (Linux, recommended), `easyremote_<version>_amd64.deb` (Mint / Ubuntu / Debian) and `easyremote-linux-x86_64.tar.gz` (other distros) and `easyremote-windows-x86_64.zip`.
 
-**2. Linux Mint (and Ubuntu / Debian).** Download the `.deb`, then either double-click it (Software Manager) or:
+**2. Linux (Linux Mint and any other distro): Flatpak.** Mint has Flatpak built in. Download `easyremote.flatpak` from the release, then in a terminal:
 
 ```
-sudo apt install ./easyremote_0.1.0_amd64.deb
-easyremote autostart on      # run as your normal user; starts now and at every login
-easyremote pair              # shows the QR code
+flatpak install --user easyremote.flatpak                       # also fetches the runtime from Flathub
+flatpak run io.github.butema.EasyRemote host-setup | sudo sh    # once: lets your user create the virtual mouse/keyboard, opens the firewall if it is on
+# log out and in once, then:
+flatpak run io.github.butema.EasyRemote autostart on            # starts now and at every login
+flatpak run io.github.butema.EasyRemote pair                    # shows the QR code (also in the menu as "EasyRemote – pair phone")
 ```
 
-The package loads the `uinput` module and adds a udev rule so your desktop user can create the virtual mouse/keyboard (it works on Cinnamon/X11 and on Wayland). If Mint's firewall (ufw) is switched on, the package opens TCP 47821 and mDNS for you. The binary is built against glibc 2.35, so it runs on Mint 21.x and 22.x. For other distributions use the `.tar.gz` and run `./install.sh`.
+Tip: `alias easyremote='flatpak run io.github.butema.EasyRemote'` makes the commands below shorter. To stop the agent: `flatpak kill io.github.butema.EasyRemote`.
+
+*Why the permissions:* the Flatpak asks for network (phone connection), `/dev/uinput` (the virtual input device), permission to write the login-autostart entry, and to run a few fixed host commands (`pactl` for volume; `xclip`/`xsel`/`wl-copy` for typing non-English text) through `flatpak-spawn --host`. A Flatpak cannot install the udev rule that gives your user access to `/dev/uinput`, which is what the one-time `host-setup` step does.
+
+*Alternative for Mint / Ubuntu / Debian without Flatpak:* `sudo apt install ./easyremote_0.1.0_amd64.deb`, then `easyremote autostart on` and `easyremote pair` (the package does the host setup itself). The binary is built against glibc 2.35, so it runs on Mint 21.x and 22.x. Other distributions: use the `.tar.gz` and `./install.sh`.
 
 **3. Windows.** Unzip, right-click `install.ps1` → *Run with PowerShell* (run as administrator once if you want the firewall rule added automatically; otherwise Windows asks the first time). It installs to `%LOCALAPPDATA%\EasyRemote`, starts at login and shows a pairing QR code.
 
@@ -51,6 +57,7 @@ easyremote devices              list paired phones
 easyremote revoke <id|name|all> remove a phone
 easyremote status               name, address, certificate fingerprint
 easyremote autostart on|off     start at login
+easyremote host-setup           (Linux) print the one-time setup script: easyremote host-setup | sudo sh
 easyremoted --mock              run without touching the PC (prints events; for testing)
 ```
 
@@ -66,7 +73,7 @@ cd android && ./gradlew testDebugUnitTest assembleDebug    # JDK 17, Android SDK
 ## Status and known limits
 
 * The agent's protocol, pairing and security logic is covered by automated tests (unit + end-to-end over real TLS/WebSocket, run on Linux).
-* **Not yet run on real hardware:** Windows input injection and volume (Core Audio), Linux `/dev/uinput` injection (including on Mint), and the whole Android app. They were written against the platform APIs and are compiled by CI, but the first real-device run may need small fixes. The shared protocol/pairing vectors are asserted on both the Rust and the Kotlin side.
+* **Not yet run on real hardware:** Windows input injection and volume (Core Audio), Linux `/dev/uinput` injection (including on Mint), the Flatpak itself, and the whole Android app. They were written against the platform APIs and are compiled by CI, but the first real-device run may need small fixes. The shared protocol/pairing vectors are asserted on both the Rust and the Kotlin side.
 * Linux typing of non-ASCII characters (e.g. Ukrainian) pastes through the clipboard (Ctrl+V), so `xclip` or `xsel` (X11; Mint ships `xsel`) or `wl-clipboard` (Wayland) must be installed, and terminal windows, which paste with Ctrl+Shift+V, will not receive such characters. Plain English letters and digits are typed as real key presses everywhere. Windows types every character directly.
 * The QR scanner uses Google Play services' code scanner; without Play services use the manual entry.
 * The release APK is signed with the debug key so it installs directly; use your own keystore before distributing it.

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=EasyRemote – pair phone
+Comment=Show the QR code that pairs your phone with this computer
+Exec=sh -c "easyremote pair; echo; read -r -p 'Press Enter to close ' _"
+Icon=io.github.butema.EasyRemote
+Terminal=true
+Categories=Utility;

@@ -1,0 +1,36 @@
+# Flatpak manifest for EasyRemote. CI builds the agent first (on Ubuntu 22.04) and this manifest
+# just packages those prebuilt binaries, which keeps the Flatpak build fast and offline-friendly.
+app-id: io.github.butema.EasyRemote
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+command: easyremote
+
+finish-args:
+  # phone <-> PC traffic (TLS WebSocket) and mDNS
+  - --share=network
+  # /dev/uinput: the virtual mouse + keyboard
+  - --device=all
+  # Volume (pactl) and clipboard (xclip/xsel/wl-copy) are run on the host through
+  # `flatpak-spawn --host`; only those fixed commands are ever executed.
+  - --talk-name=org.freedesktop.Flatpak
+  # `easyremote autostart on` writes the login entry here
+  - --filesystem=xdg-config/autostart:create
+
+modules:
+  - name: easyremote
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 easyremote /app/bin/easyremote
+      - install -Dm755 easyremoted /app/bin/easyremoted
+      - install -Dm644 io.github.butema.EasyRemote.desktop /app/share/applications/io.github.butema.EasyRemote.desktop
+      - install -Dm644 io.github.butema.EasyRemote.svg /app/share/icons/hicolor/scalable/apps/io.github.butema.EasyRemote.svg
+    sources:
+      - type: file
+        path: easyremote
+      - type: file
+        path: easyremoted
+      - type: file
+        path: io.github.butema.EasyRemote.desktop
+      - type: file
+        path: io.github.butema.EasyRemote.svg

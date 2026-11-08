@@ -105,12 +105,57 @@ jobs:
           name: easyremote-android
           path: apk/*.apk
 
+  flatpak:
+    # Packages the Linux binaries built above as a Flatpak bundle. Marked non-blocking so a Flatpak
+    # problem can never stop the APK / .deb / Windows release from being published.
+    needs: agent-linux
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: easyremote-linux
+          path: linux
+      - name: Stage sources
+        run: |
+          mkdir -p stage
+          tar -xzf linux/easyremote-linux-x86_64.tar.gz -C stage --strip-components=1 \
+              easyremote-linux-x86_64/easyremote easyremote-linux-x86_64/easyremoted
+          cp packaging/flatpak/io.github.butema.EasyRemote.* stage/
+      - name: Install Flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder dbus-user-session
+          # Ubuntu 24.04 runners block the user namespaces that bubblewrap needs
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+      - name: Build
+        working-directory: stage
+        run: |
+          flatpak-builder --user --disable-rofiles-fuse --install-deps-from=flathub --force-clean \
+              --repo=repo build-dir io.github.butema.EasyRemote.yml
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+              repo easyremote.flatpak io.github.butema.EasyRemote
+      - name: Smoke test (sandbox starts, binary runs)
+        continue-on-error: true
+        working-directory: stage
+        run: |
+          flatpak install --user -y ./easyremote.flatpak
+          dbus-run-session -- flatpak run io.github.butema.EasyRemote status
+          dbus-run-session -- flatpak run io.github.butema.EasyRemote host-setup | sh -n
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyremote-flatpak
+          path: stage/easyremote.flatpak
+
   release:
     # Publishes everything on the repository's Releases page, so the APK can be downloaded straight
     # onto the phone: a rolling "latest" pre-release on every push to main, and a normal release for
     # tags like v0.1.0.
-    needs: [agent-linux, agent-windows, android]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [agent-linux, agent-windows, android, flatpak]
+    # run even when the (non-blocking) Flatpak job failed
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.agent-linux.result == 'success' && needs.agent-windows.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -133,5 +178,5 @@ jobs:
           files: dist/*
           body: |
             **Phone:** install `EasyRemote.apk` (or `EasyRemote-debug.apk`).
-            **Linux Mint / Ubuntu / Debian:** `sudo apt install ./easyremote_*_amd64.deb`, then `easyremote autostart on` and `easyremote pair`.
+            **Linux (any distro, incl. Linux Mint):** install `easyremote.flatpak` — see the README. Alternative for Mint / Ubuntu / Debian: `sudo apt install ./easyremote_*_amd64.deb`.
             **Windows:** unzip `easyremote-windows-x86_64.zip` and run `install.ps1`.
