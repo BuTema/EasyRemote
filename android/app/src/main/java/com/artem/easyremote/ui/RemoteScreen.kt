@@ -1,6 +1,9 @@
 package com.artem.easyremote.ui
 
+import android.content.Context
 import android.content.res.Configuration
+import android.net.wifi.WifiManager
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +71,15 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
     val keepOn by vm.settings.keepScreenOn.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var keyboardRequest by remember { mutableIntStateOf(0) }
+
+    // While the remote is open keep Wi-Fi out of power-save mode: otherwise the radio sleeps between
+    // bursts and delivers the cursor movement in lumps, which shows as jumpy motion.
+    val appContext = LocalContext.current.applicationContext
+    val ready = state is ConnState.Ready
+    DisposableEffect(ready) {
+        val lock = if (ready) lowLatencyWifiLock(appContext) else null
+        onDispose { runCatching { lock?.release() } }
+    }
 
     val view = LocalView.current
     DisposableEffect(keepOn) {
@@ -114,6 +127,18 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
         }
     }
     }
+}
+
+@Suppress("DEPRECATION")
+private fun lowLatencyWifiLock(context: Context): WifiManager.WifiLock? = try {
+    val wifi = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    val mode = if (Build.VERSION.SDK_INT >= 29) WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF
+    wifi.createWifiLock(mode, "EasyRemote").apply {
+        setReferenceCounted(false)
+        acquire()
+    }
+} catch (e: Exception) {
+    null
 }
 
 @Composable

@@ -10,6 +10,6 @@ EasyRemote lets you control your own computer from your phone over your local ne
 
 **What the app sends:** touchpad movements, key presses, volume and media commands, directly from your phone to the EasyRemote agent on your own computer, over an encrypted (TLS) connection on your Wi-Fi. The connection only works with a computer you paired with.
 
-**Permissions:** Internet / network state (to reach your computer on the local network). The QR scanner is provided by Google Play services and the app itself does not access the camera or any photos.
+**Permissions:** Internet and network state (to reach your computer on the local network), and wake lock (to keep Wi-Fi in low-latency mode while the remote screen is open, so the pointer moves smoothly; it is released when you leave the screen). The QR scanner is provided by Google Play services and the app itself does not access the camera or any photos.
 
 **Contact:** open an issue at https://github.com/BuTema/EasyRemote/issues

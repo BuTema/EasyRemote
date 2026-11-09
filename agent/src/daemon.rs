@@ -22,7 +22,8 @@ pub fn run(mock: bool, stderr_log: bool) -> Result<(), String> {
     } else {
         input::create_real()?
     };
-    let handle = InputHandle::spawn(backend);
+    // real input gets pointer smoothing; the mock backend shows the raw events
+    let handle = if mock { InputHandle::spawn(backend) } else { InputHandle::spawn_smoothed(backend) };
 
     // current-thread runtime: one OS thread for all networking = minimal memory and wake-ups
     let rt = tokio::runtime::Builder::new_current_thread()

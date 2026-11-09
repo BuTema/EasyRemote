@@ -5,6 +5,7 @@ use crate::proto::{Action, Button, Cmd, Key, Media};
 use std::collections::HashSet;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -21,6 +22,18 @@ pub struct VolumeState {
 /// 0..=100) and audio is always unmuted, whichever button was pressed and also at the limits.
 pub fn plan_volume(cur: VolumeState, steps: i8) -> VolumeState {
     VolumeState { vol: (cur.vol.min(100) as i32 + steps as i32 * 5).clamp(0, 100) as u8, mute: if steps != 0 { false } else { cur.mute } }
+}
+
+/// Text for `easyremote audio-debug`: what the audio system reports (Linux only).
+pub fn audio_debug() -> String {
+    #[cfg(target_os = "linux")]
+    {
+        linux::audio_debug()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        "audio-debug is only available on Linux".to_string()
+    }
 }
 
 pub trait InputBackend: Send {
@@ -147,11 +160,22 @@ fn state_json(v: VolumeState) -> String {
 }
 
 impl InputHandle {
+    /// Applies every command exactly as it arrives (tests, mock mode).
     pub fn spawn(backend: Box<dyn InputBackend>) -> InputHandle {
+        Self::start(backend, false)
+    }
+
+    /// Like [`spawn`], but pointer movement is played out evenly over a few milliseconds instead of
+    /// in the bursts in which it arrives over Wi-Fi (see [`PointerSmoother`]).
+    pub fn spawn_smoothed(backend: Box<dyn InputBackend>) -> InputHandle {
+        Self::start(backend, true)
+    }
+
+    fn start(backend: Box<dyn InputBackend>, smooth: bool) -> InputHandle {
         let (tx, rx) = mpsc::channel::<Msg>();
         std::thread::Builder::new()
             .name("input".into())
-            .spawn(move || worker(backend, rx))
+            .spawn(move || worker(backend, rx, smooth))
             .expect("failed to start input thread");
         InputHandle { tx }
     }
@@ -171,16 +195,132 @@ impl InputHandle {
     }
 }
 
-fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>) {
+/// Spreads pointer movement evenly over time.
+///
+/// Movement reaches the PC in bursts: the phone sends a frame per touch event (60 to 120 a second)
+/// and Wi-Fi delivers them with uneven gaps. Applied as they come, each burst is one visible hop of
+/// the cursor. A real mouse reports at a steady 125 to 1000 Hz, so its motion looks continuous. The
+/// smoother holds what is still to be moved and emits a share of it every [`SMOOTH_TICK`], which
+/// turns the bursts into an even stream (about one frame of delay, [`SMOOTH_TAU_MS`]).
+/// Nothing is dropped: the whole displacement is always played out, whole pixels at a time with the
+/// fractions carried over, and a click, key or scroll first plays out everything pending.
+pub struct PointerSmoother {
+    rem_x: f32,
+    rem_y: f32,
+    acc_x: f32,
+    acc_y: f32,
+}
+
+pub const SMOOTH_TICK: Duration = Duration::from_millis(2);
+/// Time constant of the drain: the pending movement shrinks by 1/e every this many milliseconds.
+pub const SMOOTH_TAU_MS: f32 = 6.0;
+
+impl PointerSmoother {
+    pub fn new() -> Self {
+        PointerSmoother { rem_x: 0.0, rem_y: 0.0, acc_x: 0.0, acc_y: 0.0 }
+    }
+
+    pub fn add(&mut self, dx: i32, dy: i32) {
+        self.rem_x += dx as f32;
+        self.rem_y += dy as f32;
+    }
+
+    pub fn pending(&self) -> bool {
+        self.rem_x != 0.0 || self.rem_y != 0.0
+    }
+
+    /// Movement to apply now, `dt_ms` after the previous step.
+    pub fn step(&mut self, dt_ms: f32) -> (i32, i32) {
+        let a = 1.0 - (-dt_ms.clamp(0.5, 10.0) / SMOOTH_TAU_MS).exp();
+        let tx = Self::share(self.rem_x, a);
+        let ty = Self::share(self.rem_y, a);
+        self.rem_x -= tx;
+        self.rem_y -= ty;
+        (Self::whole(&mut self.acc_x, tx), Self::whole(&mut self.acc_y, ty))
+    }
+
+    /// Everything that is still pending, right now.
+    pub fn flush(&mut self) -> (i32, i32) {
+        let (x, y) = (self.rem_x + self.acc_x, self.rem_y + self.acc_y);
+        *self = PointerSmoother::new();
+        (x.round() as i32, y.round() as i32)
+    }
+
+    fn share(rem: f32, a: f32) -> f32 {
+        // the last pixel goes out in one go instead of trailing off forever
+        if rem.abs() < 1.0 { rem } else { rem * a }
+    }
+
+    fn whole(acc: &mut f32, add: f32) -> i32 {
+        *acc += add;
+        let whole = acc.trunc();
+        *acc -= whole;
+        whole as i32
+    }
+}
+
+/// Windows timers tick every 15.6 ms unless asked otherwise, which would defeat a 2 ms smoother.
+fn raise_timer_resolution() {
+    #[cfg(windows)]
+    unsafe {
+        let _ = windows::Win32::Media::timeBeginPeriod(1);
+    }
+}
+
+fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>, smooth: bool) {
     let mut held_buttons: HashSet<Button> = HashSet::new();
     let mut held_keys: HashSet<Key> = HashSet::new();
+    let mut smoother = PointerSmoother::new();
+    let mut last_step = Instant::now();
 
-    for msg in rx {
+    if smooth {
+        raise_timer_resolution();
+    }
+
+    loop {
+        let msg = if smoother.pending() {
+            match rx.recv_timeout(SMOOTH_TICK) {
+                Ok(m) => Some(m),
+                Err(mpsc::RecvTimeoutError::Timeout) => None,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        } else {
+            match rx.recv() {
+                Ok(m) => {
+                    last_step = Instant::now(); // idle -> moving: start the clock now
+                    Some(m)
+                }
+                Err(_) => break,
+            }
+        };
+
+        // play out a slice of the pending movement
+        if smoother.pending() && last_step.elapsed() >= SMOOTH_TICK {
+            let dt = last_step.elapsed().as_secs_f32() * 1000.0;
+            last_step = Instant::now();
+            let (dx, dy) = smoother.step(dt);
+            if dx != 0 || dy != 0 {
+                backend.mouse_move(dx, dy);
+            }
+        }
+
+        let Some(msg) = msg else { continue };
         match msg {
             Msg::Cmd(cmd, reply) => {
+                // keep the order of events: finish the pending movement before anything else
+                if !matches!(cmd, Cmd::Move { .. }) && smoother.pending() {
+                    let (dx, dy) = smoother.flush();
+                    if dx != 0 || dy != 0 {
+                        backend.mouse_move(dx, dy);
+                    }
+                }
                 let state = match cmd {
                     Cmd::Move { dx, dy } => {
-                        backend.mouse_move(dx, dy);
+                        if smooth {
+                            smoother.add(dx, dy);
+                        } else {
+                            backend.mouse_move(dx, dy);
+                        }
                         None
                     }
                     Cmd::Scroll { dx, dy } => {
@@ -238,6 +378,7 @@ fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>) {
                 }
             }
             Msg::ReleaseAll => {
+                smoother = PointerSmoother::new();
                 for b in held_buttons.drain() {
                     backend.button(b, false);
                 }
@@ -282,5 +423,87 @@ mod volume_tests {
         assert_eq!(m.volume_step(-1), Some(st(45, false)));
         assert_eq!(m.mute_toggle(), Some(st(45, true)));
         assert_eq!(m.mute_toggle(), Some(st(45, false)));
+    }
+}
+
+#[cfg(test)]
+mod smoother_tests {
+    use super::*;
+
+    /// Plays out all pending movement in 2 ms steps and returns the per-step output.
+    fn drain(s: &mut PointerSmoother) -> Vec<(i32, i32)> {
+        let mut out = Vec::new();
+        for _ in 0..1000 {
+            if !s.pending() {
+                break;
+            }
+            out.push(s.step(2.0));
+        }
+        assert!(!s.pending(), "smoother must finish");
+        out
+    }
+
+    #[test]
+    fn total_displacement_is_preserved() {
+        let mut s = PointerSmoother::new();
+        let (mut sx, mut sy) = (0, 0);
+        let (mut ex, mut ey) = (0, 0);
+        for (dx, dy) in [(7, -3), (1, 1), (-13, 5), (22, 0), (0, -9), (3, 3)] {
+            s.add(dx, dy);
+            sx += dx;
+            sy += dy;
+            for _ in 0..3 {
+                let (x, y) = s.step(2.0);
+                ex += x;
+                ey += y;
+            }
+        }
+        for (x, y) in drain(&mut s) {
+            ex += x;
+            ey += y;
+        }
+        let (fx, fy) = s.flush();
+        assert_eq!((ex + fx, ey + fy), (sx, sy));
+    }
+
+    #[test]
+    fn a_burst_is_spread_over_many_small_steps() {
+        let mut s = PointerSmoother::new();
+        s.add(40, 0);
+        let steps = drain(&mut s);
+        assert!(steps.len() >= 8, "40 px should take several ticks, got {}", steps.len());
+        assert!(steps.iter().all(|(x, _)| *x <= 12), "no single hop of more than a third: {:?}", steps);
+        assert_eq!(steps.iter().map(|(x, _)| x).sum::<i32>(), 40);
+    }
+
+    #[test]
+    fn it_stops_promptly() {
+        let mut s = PointerSmoother::new();
+        s.add(100, 100);
+        let steps = drain(&mut s);
+        assert!(steps.len() * 2 <= 50, "100 px must be out within ~50 ms, took {} ms", steps.len() * 2);
+    }
+
+    #[test]
+    fn flush_plays_out_everything_at_once() {
+        let mut s = PointerSmoother::new();
+        s.add(30, -20);
+        assert_eq!(s.flush(), (30, -20));
+        assert!(!s.pending());
+    }
+
+    #[test]
+    fn worker_applies_smoothed_moves_in_order_with_clicks() {
+        let (mock, log) = MockBackend::new();
+        let h = InputHandle::spawn_smoothed(Box::new(mock));
+        h.send(Cmd::Move { dx: 50, dy: 0 }, None);
+        h.send(Cmd::Button(Button::Left, Action::Click), None);
+        std::thread::sleep(Duration::from_millis(80));
+        let log = log.lock().unwrap().clone();
+        let moved: i32 = log.iter().filter_map(|l| l.strip_prefix("move ")).map(|r| r.split(' ').next().unwrap().parse::<i32>().unwrap()).sum();
+        assert_eq!(moved, 50, "{:?}", log);
+        let click = log.iter().position(|l| l.starts_with("button")).unwrap();
+        assert!(log[..click].iter().all(|l| l.starts_with("move")), "all movement precedes the click: {:?}", log);
+        assert!(log[click..].iter().all(|l| l.starts_with("button")), "{:?}", log);
     }
 }

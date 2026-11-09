@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -137,8 +138,14 @@ fun PadButton(
 }
 
 private val CELL_HEIGHT = 50.dp
+/** gap between the media buttons */
 private val CELL_GAP = 6.dp
-private val GROUP_GAP = 12.dp
+/** gap between the arrow / Esc / Enter buttons: half of the media gap */
+private val NAV_GAP = 3.dp
+/** the rows of both groups use the same vertical gap so that they stay aligned */
+private val ROW_GAP = 3.dp
+/** clear space between the navigation group and the media group */
+private val GROUP_GAP = 24.dp
 
 /**
  * The control panel: navigation on the left, media on the right, both as two aligned rows.
@@ -178,15 +185,15 @@ private fun RowScope.Cell(content: (@Composable (Modifier) -> Unit)?) {
 
 @Composable
 private fun NavGroup(c: RemoteController, modifier: Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
             Cell { PadButton("Escape", it, label = "Esc") { c.key(Proto.KEY_ESC) } }
             Cell(null)
             Cell { PadButton("Up", it, icon = Icons.Default.KeyboardArrowUp, repeat = true) { c.key(Proto.KEY_UP) } }
             Cell(null)
             Cell { PadButton("Enter", it, icon = Icons.Default.KeyboardReturn) { c.key(Proto.KEY_ENTER) } }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
             Cell(null)
             Cell { PadButton("Left", it, icon = Icons.Default.KeyboardArrowLeft, repeat = true) { c.key(Proto.KEY_LEFT) } }
             Cell { PadButton("Down", it, icon = Icons.Default.KeyboardArrowDown, repeat = true) { c.key(Proto.KEY_DOWN) } }
@@ -199,14 +206,15 @@ private fun NavGroup(c: RemoteController, modifier: Modifier) {
 @Composable
 private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () -> Unit, modifier: Modifier) {
     val muted = volume?.muted == true
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
             Cell {
                 PadButton("Play or pause", it, content = { fg ->
-                    // both symbols, side by side, in the one button
+                    // play / pause: both symbols with a slash between them, in the one button
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
-                        Icon(Icons.Default.Pause, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = fg, modifier = Modifier.size(16.dp))
+                        Text("/", color = fg, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Icon(Icons.Default.Pause, contentDescription = null, tint = fg, modifier = Modifier.size(16.dp))
                     }
                 }) { c.media(Proto.MEDIA_PLAY_PAUSE) }
             }
@@ -238,11 +246,21 @@ private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () 
     }
 }
 
-/** A small speaker with a clearly visible minus or plus next to it. */
+/**
+ * A small speaker with a clearly visible minus or plus touching it. The speaker glyph has empty
+ * space to its right inside its 24-unit square and the sign glyph has some on its left, so the sign
+ * is pulled in by exactly that much instead of being laid out next to the square.
+ */
 @Composable
 private fun SpeakerWithSign(sign: ImageVector, tint: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Default.VolumeMute, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-        Icon(sign, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+    Box(Modifier.size(width = 32.dp, height = 22.dp)) {
+        Icon(
+            Icons.Default.VolumeMute, contentDescription = null, tint = tint,
+            modifier = Modifier.size(22.dp).align(Alignment.CenterStart),
+        )
+        Icon(
+            sign, contentDescription = null, tint = tint,
+            modifier = Modifier.size(18.dp).align(Alignment.CenterStart).offset(x = 11.dp),
+        )
     }
 }

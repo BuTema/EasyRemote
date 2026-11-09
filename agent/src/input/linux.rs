@@ -268,6 +268,60 @@ fn set_mute(on: bool) -> bool {
         || run("wpctl", &["set-mute", "@DEFAULT_AUDIO_SINK@", v]).is_some()
 }
 
+/// Waits until the system reports the wanted mute state; false if it does not within `total`.
+fn wait_for_mute(want: bool, total: std::time::Duration) -> bool {
+    let start = std::time::Instant::now();
+    loop {
+        if read_volume().map(|v| v.mute == want).unwrap_or(false) {
+            return true;
+        }
+        if start.elapsed() >= total {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+}
+
+/// What the audio system says about the default output, for the log and `easyremote audio-debug`.
+pub fn audio_debug() -> String {
+    let mut out = String::new();
+    let sink = run("pactl", &["get-default-sink"]).unwrap_or_default();
+    out.push_str(&format!("default sink: {}", sink.trim()));
+    if let Some(list) = run("pactl", &["list", "sinks"]) {
+        let mut in_default = false;
+        for line in list.lines() {
+            let t = line.trim();
+            if let Some(name) = t.strip_prefix("Name: ") {
+                in_default = name.trim() == sink.trim();
+            }
+            if in_default && ["Description:", "State:", "Mute:", "Volume:", "Active Port:", "Base Volume:"].iter().any(|k| t.starts_with(k)) {
+                out.push_str(&format!("\n  {t}"));
+            }
+        }
+    }
+    if let Some(w) = run("wpctl", &["get-volume", "@DEFAULT_AUDIO_SINK@"]) {
+        out.push_str(&format!("\nwpctl: {}", w.trim()));
+    }
+    out
+}
+
+impl LinuxInput {
+    /// Mutes or unmutes the way a physical mute key does: the desktop's own sound handler toggles
+    /// the output, which also updates its tray icon and on-screen display. Setting the mute flag
+    /// directly (pactl) can leave a desktop that keeps its own idea of the state out of step, with
+    /// the sound still muted while the flag reads "unmuted". If nothing reacts to the key (a bare
+    /// window manager without a media-key daemon), the flag is set directly.
+    fn set_mute_like_the_key(&mut self, want: bool) -> bool {
+        self.tap(KeyCode::KEY_MUTE, false);
+        if wait_for_mute(want, std::time::Duration::from_millis(700)) {
+            return true;
+        }
+        info!("mute key had no effect, setting the mute flag directly");
+        set_mute(want);
+        wait_for_mute(want, std::time::Duration::from_millis(400))
+    }
+}
+
 impl InputBackend for LinuxInput {
     fn mouse_move(&mut self, dx: i32, dy: i32) {
         let mut ev = Vec::with_capacity(2);
@@ -354,7 +408,7 @@ impl InputBackend for LinuxInput {
             Some(cur) => {
                 let next = super::plan_volume(cur, steps);
                 // unmute first so that the new level is audible at once
-                let unmuted = !(cur.mute && !next.mute) || set_mute(false);
+                let unmuted = !(cur.mute && !next.mute) || self.set_mute_like_the_key(false);
                 let set = set_volume(next.vol);
                 info!("volume: {}% muted={} -> {}% muted={} (unmute ok={}, set ok={})", cur.vol, cur.mute, next.vol, next.mute, unmuted, set);
                 // report what the system says now, not what we hoped for
@@ -374,8 +428,8 @@ impl InputBackend for LinuxInput {
     fn mute_toggle(&mut self) -> Option<VolumeState> {
         match read_volume() {
             Some(cur) => {
-                let ok = set_mute(!cur.mute);
-                info!("mute: {} -> {} (ok={})", cur.mute, !cur.mute, ok);
+                let ok = self.set_mute_like_the_key(!cur.mute);
+                info!("mute: {} -> {} (ok={})\n{}", cur.mute, !cur.mute, ok, audio_debug());
                 read_volume().or(Some(VolumeState { vol: cur.vol, mute: !cur.mute }))
             }
             None => {
