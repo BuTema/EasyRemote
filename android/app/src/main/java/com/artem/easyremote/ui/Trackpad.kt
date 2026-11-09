@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.artem.easyremote.Proto
 import com.artem.easyremote.RemoteController
+import com.artem.easyremote.StraightFilter
 import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
@@ -68,14 +69,14 @@ fun Trackpad(
     c: RemoteController,
     speed: () -> Float,
     natural: () -> Boolean,
+    straight: () -> Boolean = { true },
     modifier: Modifier = Modifier,
     /** fixed pad height (portrait, where the pad hugs the bottom); null = take all remaining height */
     padHeight: Dp? = null,
-    /** shown between the Left and Right buttons (the connection status) */
-    middle: (@Composable () -> Unit)? = null,
 ) {
     val speedNow by rememberUpdatedState(speed)
     val naturalNow by rememberUpdatedState(natural)
+    val straightNow by rememberUpdatedState(straight)
     Column(modifier) {
         Box(
             (if (padHeight != null) Modifier.height(padHeight) else Modifier.weight(1f))
@@ -83,7 +84,7 @@ fun Trackpad(
                 .clip(RoundedCornerShape(20.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .semantics { contentDescription = "Touchpad" }
-                .pointerInput(Unit) { trackpadGestures(c, { speedNow() }, { naturalNow() }) },
+                .pointerInput(Unit) { trackpadGestures(c, { speedNow() }, { naturalNow() }, { straightNow() }) },
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -95,9 +96,6 @@ fun Trackpad(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().height(56.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ClickButton("Left click", "Left", Proto.BTN_LEFT, c, Modifier.weight(1f).fillMaxHeight())
-            if (middle != null) {
-                Box(Modifier.width(84.dp).fillMaxHeight(), contentAlignment = Alignment.Center) { middle() }
-            }
             ClickButton("Right click", "Right", Proto.BTN_RIGHT, c, Modifier.weight(1f).fillMaxHeight())
         }
     }
@@ -138,6 +136,7 @@ private suspend fun PointerInputScope.trackpadGestures(
     c: RemoteController,
     speed: () -> Float,
     natural: () -> Boolean,
+    straight: () -> Boolean,
 ) {
     var lastTapUp = 0L // uptime of the previous tap, for tap-and-drag / double click
 
@@ -160,6 +159,7 @@ private suspend fun PointerInputScope.trackpadGestures(
         var buttonHeld = false
         var lastTime = t0
         var speedDpMs = 0f // smoothed finger speed
+        val straightFilter = StraightFilter()
 
         if (dragMode) {
             c.button(Proto.BTN_LEFT, Proto.ACT_PRESS)
@@ -207,8 +207,16 @@ private suspend fun PointerInputScope.trackpadGestures(
                     val alpha = 1f - exp(-dtMs / SPEED_TAU_MS)
                     speedDpMs += alpha * (hypot(dxDp, dyDp) / dtMs - speedDpMs)
                     val gain = PC_PX_PER_DP * speed() * (1f + min(speedDpMs / 0.6f, 1.5f))
-                    remX += dxDp * gain
-                    remY += dyDp * gain
+                    // straight-line assist: flatten small sideways wobble in straight strokes
+                    var fx = dxDp
+                    var fy = dyDp
+                    if (straight()) {
+                        straightFilter.apply(dxDp, dyDp, dtMs)
+                        fx = straightFilter.outX
+                        fy = straightFilter.outY
+                    }
+                    remX += fx * gain
+                    remY += fy * gain
                     val ix = remX.toInt()
                     val iy = remY.toInt()
                     remX -= ix

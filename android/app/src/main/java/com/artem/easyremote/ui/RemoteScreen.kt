@@ -70,6 +70,7 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
     val volume by c.volume.collectAsState()
     val agentBuild by c.agentBuild.collectAsState()
     val natural by vm.settings.naturalScroll.collectAsState()
+    val straight by vm.settings.straightAssist.collectAsState()
     val speed by vm.settings.pointerSpeed.collectAsState()
     val keepOn by vm.settings.keepScreenOn.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -104,8 +105,8 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        // In portrait the status sits between the Left and Right buttons; elsewhere in the top bar.
-        TopBar(pc.name, state, showStatus = landscape || !ready, onBack = { vm.back() })
+        // While connected the status sits under the arrow keys (opposite the volume bar); otherwise here.
+        TopBar(pc.name, state, showStatus = !ready, onBack = { vm.back() })
         if (ready && agentBuild == null) OutdatedAgentNotice()
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val bodyHeight = maxHeight // read here: inside the nested Column the scope marker blocks it
@@ -115,9 +116,10 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
                     Row(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Controls(
                             c, volume, onKeyboard = { keyboardRequest++ }, stacked = true,
+                            status = { ConnStatus(state, stacked = false) },
                             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                         )
-                        Trackpad(c, { speed }, { natural }, Modifier.weight(1f).fillMaxHeight())
+                        Trackpad(c, { speed }, { natural }, { straight }, Modifier.weight(1f).fillMaxHeight())
                     }
                 } else {
                     // Flexible empty space on top; controls, touchpad and the click buttons form one
@@ -126,12 +128,11 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
                         Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
                         verticalArrangement = Arrangement.Bottom,
                     ) {
-                        Controls(c, volume, onKeyboard = { keyboardRequest++ })
+                        Controls(c, volume, onKeyboard = { keyboardRequest++ }, status = { ConnStatus(state, stacked = false) })
                         Spacer(Modifier.height(8.dp))
                         Trackpad(
-                            c, { speed }, { natural }, Modifier.fillMaxWidth(),
+                            c, { speed }, { natural }, { straight }, Modifier.fillMaxWidth(),
                             padHeight = touchpadHeightDp(bodyHeight.value).dp,
-                            middle = { ConnStatus(state, stacked = true) },
                         )
                     }
                 }
@@ -173,7 +174,7 @@ private fun TopBar(name: String, state: ConnState, showStatus: Boolean, onBack: 
 
 /** Connection state as a coloured dot and a word. [stacked] puts the word under the dot. */
 @Composable
-private fun ConnStatus(state: ConnState, stacked: Boolean) {
+internal fun ConnStatus(state: ConnState, stacked: Boolean) {
     val (color, label) = when (state) {
         is ConnState.Ready -> Color(0xFF2E9E57) to "Connected"
         is ConnState.Connecting -> Color(0xFFE0A100) to "Connecting…"

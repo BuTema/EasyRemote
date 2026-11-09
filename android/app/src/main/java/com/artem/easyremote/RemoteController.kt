@@ -174,7 +174,7 @@ class RemoteController(
 
     // Pointer movement and scrolling are coalesced, never dropped: the pending deltas are summed, so
     // the total displacement is exact. A frame goes out immediately whenever the link is idle (no
-    // added latency) and at most every MIN_FRAME_MS (over 300 per second). While the network is behind
+    // added latency) and at most every MIN_FRAME_MS (up to 500 per second). While the network is behind
     // (bytes still queued in the socket) new movement keeps adding up in the pending sum instead of
     // piling up as stale frames, so the cursor never keeps running after the finger has stopped.
     private var pendingDx = 0
@@ -308,7 +308,7 @@ class RemoteController(
     }
 
     companion object {
-        private const val MIN_FRAME_MS = 3L
+        private const val MIN_FRAME_MS = 2L
         private const val BACKLOG_BYTES = 256L
         private const val MAX_FAILURES = 5
     }

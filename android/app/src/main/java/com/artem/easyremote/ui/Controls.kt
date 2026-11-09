@@ -165,15 +165,17 @@ fun Controls(
     onKeyboard: () -> Unit,
     modifier: Modifier = Modifier,
     stacked: Boolean = false,
+    /** shown under the arrow keys, level with the volume bar under the media buttons */
+    status: (@Composable () -> Unit)? = null,
 ) {
     if (stacked) {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
-            NavGroup(c, Modifier.fillMaxWidth())
+            NavGroup(c, Modifier.fillMaxWidth(), status)
             MediaGroup(c, volume, onKeyboard, Modifier.fillMaxWidth())
         }
     } else {
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
-            NavGroup(c, Modifier.weight(1f))
+            NavGroup(c, Modifier.weight(1f), status)
             MediaGroup(c, volume, onKeyboard, Modifier.weight(1f))
         }
     }
@@ -187,7 +189,7 @@ private fun RowScope.Cell(content: (@Composable (Modifier) -> Unit)?) {
 }
 
 @Composable
-private fun NavGroup(c: RemoteController, modifier: Modifier) {
+private fun NavGroup(c: RemoteController, modifier: Modifier, status: (@Composable () -> Unit)?) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
             Cell { PadButton("Escape", it, label = "Esc") { c.key(Proto.KEY_ESC) } }
@@ -199,6 +201,8 @@ private fun NavGroup(c: RemoteController, modifier: Modifier) {
             Cell { PadButton("Down", it, icon = Icons.Default.KeyboardArrowDown, repeat = true) { c.key(Proto.KEY_DOWN) } }
             Cell { PadButton("Right", it, icon = Icons.Default.KeyboardArrowRight, repeat = true) { c.key(Proto.KEY_RIGHT) } }
         }
+        // connection status, level with the volume bar under the media group
+        Box(Modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.Center) { status?.invoke() }
     }
 }
 

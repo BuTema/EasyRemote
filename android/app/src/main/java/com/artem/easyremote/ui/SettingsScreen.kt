@@ -34,6 +34,7 @@ fun SettingsScreen(vm: AppViewModel) {
     val speed by s.pointerSpeed.collectAsState()
     val volKeys by s.volumeKeys.collectAsState()
     val awake by s.keepScreenOn.collectAsState()
+    val straight by s.straightAssist.collectAsState()
 
     Scaffold(
         topBar = {
@@ -55,6 +56,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 Text("Pointer speed", style = MaterialTheme.typography.titleMedium)
                 Slider(value = speed, onValueChange = { s.setPointerSpeed(it) }, valueRange = 0.5f..2.5f)
             }
+            SwitchRow("Straight-line assist", "Smooths out small sideways wobble while your finger moves in a straight line", straight) { s.setStraightAssist(it) }
             SwitchRow("Natural scrolling", "Two fingers up moves the page up, like on a phone", natural) { s.setNaturalScroll(it) }
             SwitchRow("Phone volume buttons control the PC", "While a PC is connected", volKeys) { s.setVolumeKeys(it) }
             SwitchRow("Keep screen on", "Uses more battery; the connection pauses when the screen is off", awake) { s.setKeepScreenOn(it) }

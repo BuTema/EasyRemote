@@ -84,6 +84,7 @@ class SettingsStore(context: Context) {
     val pointerSpeed = MutableStateFlow(prefs.getFloat("speed", 1.0f))
     val volumeKeys = MutableStateFlow(prefs.getBoolean("volkeys", true))
     val keepScreenOn = MutableStateFlow(prefs.getBoolean("awake", false))
+    val straightAssist = MutableStateFlow(prefs.getBoolean("straight", true))
 
     fun setNaturalScroll(v: Boolean) {
         naturalScroll.value = v
@@ -98,6 +99,11 @@ class SettingsStore(context: Context) {
     fun setVolumeKeys(v: Boolean) {
         volumeKeys.value = v
         prefs.edit().putBoolean("volkeys", v).apply()
+    }
+
+    fun setStraightAssist(v: Boolean) {
+        straightAssist.value = v
+        prefs.edit().putBoolean("straight", v).apply()
     }
 
     fun setKeepScreenOn(v: Boolean) {

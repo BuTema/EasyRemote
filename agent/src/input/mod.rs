@@ -224,6 +224,10 @@ pub struct PointerSmoother {
 }
 
 pub const SMOOTH_TICK: Duration = Duration::from_millis(2);
+/// Faster tick used while movement arrives in quick succession (a 240 Hz-class touch panel).
+pub const SMOOTH_TICK_FAST: Duration = Duration::from_millis(1);
+/// Frames arriving at least this close together (smoothed gap, ms) switch to the fast tick.
+const FAST_GAP_MS: f32 = 4.5;
 /// Time constant of the drain: the pending movement shrinks by 1/e every this many milliseconds.
 pub const SMOOTH_TAU_MS: f32 = 6.0;
 
@@ -240,6 +244,12 @@ impl PointerSmoother {
             self.gap_ms += 0.3 * (gap_ms.max(0.5) - self.gap_ms);
             self.tau_ms = (0.8 * self.gap_ms).clamp(2.5, SMOOTH_TAU_MS);
         }
+    }
+
+    /// How often to play out movement: every millisecond while frames arrive fast, otherwise every
+    /// two. Only asked while movement is pending, so an idle agent never wakes up.
+    pub fn tick(&self) -> Duration {
+        if self.gap_ms <= FAST_GAP_MS { SMOOTH_TICK_FAST } else { SMOOTH_TICK }
     }
 
     pub fn add(&mut self, dx: i32, dy: i32) {
@@ -305,7 +315,7 @@ fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>, smooth: b
 
     loop {
         let msg = if smoother.pending() {
-            match rx.recv_timeout(SMOOTH_TICK) {
+            match rx.recv_timeout(smoother.tick()) {
                 Ok(m) => Some(m),
                 Err(mpsc::RecvTimeoutError::Timeout) => None,
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -321,7 +331,7 @@ fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>, smooth: b
         };
 
         // play out a slice of the pending movement
-        if smoother.pending() && last_step.elapsed() >= SMOOTH_TICK {
+        if smoother.pending() && last_step.elapsed() >= smoother.tick() {
             let dt = last_step.elapsed().as_secs_f32() * 1000.0;
             last_step = Instant::now();
             let (dx, dy) = smoother.step(dt);
@@ -461,6 +471,20 @@ mod volume_tests {
 #[cfg(test)]
 mod smoother_tests {
     use super::*;
+
+    #[test]
+    fn tick_is_fast_only_when_frames_arrive_fast() {
+        let mut s = PointerSmoother::new();
+        assert_eq!(s.tick(), SMOOTH_TICK); // starting assumption: 8 ms gaps
+        for _ in 0..40 {
+            s.observe_gap(4.0);
+        }
+        assert_eq!(s.tick(), SMOOTH_TICK_FAST);
+        for _ in 0..40 {
+            s.observe_gap(8.3);
+        }
+        assert_eq!(s.tick(), SMOOTH_TICK);
+    }
 
     /// Plays out all pending movement in 2 ms steps and returns the per-step output.
     fn drain(s: &mut PointerSmoother) -> Vec<(i32, i32)> {
