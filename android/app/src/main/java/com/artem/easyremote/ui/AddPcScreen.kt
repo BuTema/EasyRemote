@@ -2,6 +2,9 @@
 
 package com.artem.easyremote.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,8 +51,15 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Composable
 fun AddPcScreen(vm: AppViewModel) {
+    val wall by vm.paywall.state.collectAsState()
     val pair by vm.pair.collectAsState()
     val found by vm.discovery.found.collectAsState()
     val pcs by vm.pcs.collectAsState()
@@ -92,6 +103,27 @@ fun AddPcScreen(vm: AppViewModel) {
             Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (wall.enabled && pcs.isNotEmpty()) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Your first PC is free. Each additional PC needs a one-time purchase.", style = MaterialTheme.typography.bodyMedium)
+                        if (wall.credits > 0) {
+                            Text(
+                                if (wall.credits == 1) "1 PC slot bought: pair your PC now." else "${wall.credits} PC slots bought.",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Button(
+                            onClick = { context.findActivity()?.let { vm.paywall.buy(it) } },
+                            enabled = !wall.busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Buy a PC slot" + (wall.price?.let { " – $it" } ?: "")) }
+                        wall.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
+
             Text("On your PC, run", style = MaterialTheme.typography.bodyMedium)
             Text("easyremote pair", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 

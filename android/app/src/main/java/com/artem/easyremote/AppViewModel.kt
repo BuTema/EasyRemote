@@ -28,6 +28,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val store = PcStore(app)
     val settings = SettingsStore(app)
     val discovery = Discovery(app)
+    val paywall: Paywall = createPaywall(app)
 
     private val _pcs = MutableStateFlow(store.all())
     val pcs: StateFlow<List<Pc>> = _pcs
@@ -59,6 +60,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun showAdd() {
+        paywall.refresh()
         _pair.value = PairUi.Idle
         _screen.value = Screen.Add
     }
@@ -82,6 +84,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Activity came to the foreground. */
     fun onForeground() {
         discovery.start()
+        if (_screen.value is Screen.Add) paywall.refresh() // e.g. back from the purchase sheet
         val s = _screen.value
         if (s is Screen.Remote) {
             store.all().firstOrNull { it.fingerprint == s.fingerprint }?.let { controller.start(it) }
@@ -142,6 +145,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startPair(host: String, port: Int, secret: String, pinned: String?) {
         if (_pair.value == PairUi.Working) return
+        val wall = paywall.state.value
+        val before = _pcs.value
+        if (PairPolicy.needsCredit(wall.enabled, before, pinned) && wall.credits < 1) {
+            _pair.value = PairUi.Error(
+                "Your first PC is free. Each additional PC needs a one-time purchase" +
+                    (wall.price?.let { " ($it)" } ?: "") + ". Buy it with the button above, then pair again."
+            )
+            return
+        }
         _pair.value = PairUi.Working
         viewModelScope.launch {
             val session = WsSession(http)
@@ -161,8 +173,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         _pair.value = PairUi.Error("The PC did not complete pairing.")
                     } else {
                         val pc = Pc(out.seenFingerprint, p.name, host, port, p.id, p.token)
+                        // spend a credit only if this really was an additional PC
+                        val charged = PairPolicy.needsCredit(wall.enabled, before, pc.fingerprint)
                         store.save(pc)
                         refresh()
+                        if (charged) paywall.consumeOne()
                         _pair.value = PairUi.Idle
                         openRemote(pc)
                     }

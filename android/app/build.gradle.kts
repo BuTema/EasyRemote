@@ -33,6 +33,13 @@ android {
         }
     }
 
+    // "play" = Google Play build (paid extra PCs, Play Billing); "direct" = GitHub APK, no limit.
+    flavorDimensions += "dist"
+    productFlavors {
+        create("direct") { dimension = "dist" }
+        create("play") { dimension = "dist" }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -72,6 +79,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // QR scanner provided by Google Play services: no camera permission, no bundled ML model.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+
+    // Google Play Billing (Java library; version 8+ is required by Play since 31 Aug 2026). Play build only.
+    "playImplementation"("com.android.billingclient:billing:8.3.0")
 
     testImplementation("junit:junit:4.13.2")
 }

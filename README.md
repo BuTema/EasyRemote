@@ -67,7 +67,7 @@ State lives in `%APPDATA%\EasyRemote` or `~/.config/EasyRemote` (certificate, pa
 
 ```
 cd agent   && cargo test && cargo build --release
-cd android && ./gradlew testDebugUnitTest assembleDebug    # JDK 17, Android SDK 36
+cd android && ./gradlew testDirectDebugUnitTest assembleDirectDebug    # JDK 17, Android SDK 36
 ```
 
 ## Status and known limits
