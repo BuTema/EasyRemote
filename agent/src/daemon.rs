@@ -14,6 +14,7 @@ pub fn run(mock: bool, stderr_log: bool) -> Result<(), String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
     crate::log::init(&dir, stderr_log);
 
+    info!("EasyRemote agent {} (build {}) starting", env!("CARGO_PKG_VERSION"), crate::build_id());
     let cfg = config::load_config(&dir).map_err(|e| e.to_string())?;
     let identity = config::load_identity(&dir).map_err(|e| e.to_string())?;
 

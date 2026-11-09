@@ -96,7 +96,7 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        TopBar(pc.name, state, volume, onBack = { vm.back() })
+        TopBar(pc.name, state, onBack = { vm.back() })
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val bodyHeight = maxHeight // read here: inside the nested Column the scope marker blocks it
             if (state is ConnState.Ready) {
@@ -142,7 +142,7 @@ private fun lowLatencyWifiLock(context: Context): WifiManager.WifiLock? = try {
 }
 
 @Composable
-private fun TopBar(name: String, state: ConnState, volume: VolumeInfo?, onBack: () -> Unit) {
+private fun TopBar(name: String, state: ConnState, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -155,14 +155,6 @@ private fun TopBar(name: String, state: ConnState, volume: VolumeInfo?, onBack: 
             is ConnState.Connecting -> Color(0xFFE0A100) to "Connecting…"
             is ConnState.Failed -> MaterialTheme.colorScheme.error to "Offline"
             is ConnState.Idle -> MaterialTheme.colorScheme.outline to ""
-        }
-        if (state is ConnState.Ready && volume != null) {
-            Text(
-                if (volume.muted) "Muted" else "${volume.percent}%",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (volume.muted) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onBackground,
-            )
-            Spacer(Modifier.width(14.dp))
         }
         Box(Modifier.size(8.dp).background(color, CircleShape))
         Spacer(Modifier.width(6.dp))

@@ -24,6 +24,8 @@ jobs:
         run: cargo test --locked
       - name: Build release
         working-directory: agent
+        env:
+          EASYREMOTE_BUILD: ${{ github.sha }}
         run: cargo build --release --locked
       - name: Check glibc compatibility (must be <= 2.35)
         run: |
@@ -57,6 +59,8 @@ jobs:
         run: cargo test --locked
       - name: Build release
         working-directory: agent
+        env:
+          EASYREMOTE_BUILD: ${{ github.sha }}
         run: cargo build --release --locked
       - name: Package
         shell: pwsh

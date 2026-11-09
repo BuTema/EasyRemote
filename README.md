@@ -46,8 +46,10 @@ Tip: `alias easyremote='flatpak run io.github.butema.EasyRemote'` makes the comm
 ## Using it
 
 * **Touchpad** (bottom, or right side in landscape): one finger moves, tap = left click, tap-and-hold-and-move = drag, two fingers scroll, two-finger tap = right click. Left / Right buttons below it.
-* **Control panel** (directly above the touchpad, the whole group sits at the bottom of the screen for one-handed use): on the left `Esc` · arrows (hold to repeat) · `Enter`; on the right, top row **Play/Pause**, **Fullscreen** (sends the letter **F**, which most video players use; not F11) and the **keyboard** button (opens your phone's normal keyboard in any language), bottom row **volume −**, **mute** and **volume +** (one step = 5 %). Mute turns red while the PC is muted, and either volume button unmutes. The current volume is shown at the top, and changes made on the PC itself show up on the phone within a couple of seconds.
+* **Control panel** (directly above the touchpad, the whole group sits at the bottom of the screen for one-handed use): on the left `Esc` · arrows (hold to repeat) · `Enter`; on the right, top row **Play/Pause**, **Fullscreen** (sends the letter **F**, which most video players use; not F11) and the **keyboard** button (opens your phone's normal keyboard in any language), bottom row **volume −**, **mute** and **volume +** (one step = 5 %). Mute turns red while the PC is muted, and either volume button unmutes. The current volume is shown under the volume buttons, and changes made on the PC itself show up on the phone within a couple of seconds.
 * The phone's own volume buttons also control the PC volume while connected (can be turned off in Settings).
+
+**Updating the agent:** install the new package or Flatpak over the old one, then run `easyremote autostart on`: it stops the old agent and starts the new one (an agent that finds itself replaced on disk also restarts itself the next time a phone connects). `easyremote status` shows the build you have.
 
 ## Agent commands
 
@@ -57,6 +59,7 @@ easyremote devices              list paired phones
 easyremote revoke <id|name|all> remove a phone
 easyremote status               name, address, certificate fingerprint
 easyremote autostart on|off     start at login
+easyremote audio-debug          (Linux) what the audio system reports, for volume / mute problems
 easyremote host-setup           (Linux) print the one-time setup script: easyremote host-setup | sudo sh
 easyremoted --mock              run without touching the PC (prints events; for testing)
 ```

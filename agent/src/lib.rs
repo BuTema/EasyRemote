@@ -13,4 +13,13 @@ pub mod hostenv;
 pub mod input;
 pub mod pairing;
 pub mod proto;
+pub mod selfupdate;
 pub mod server;
+
+/// Which build this is: the short git commit CI built it from, or "dev" for a local build.
+pub fn build_id() -> &'static str {
+    match option_env!("EASYREMOTE_BUILD") {
+        Some(b) if !b.is_empty() => &b[..b.len().min(7)],
+        _ => "dev",
+    }
+}

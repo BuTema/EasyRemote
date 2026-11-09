@@ -81,8 +81,14 @@ pub fn enable() -> Result<String, String> {
     );
     std::fs::write(&desktop, text).map_err(|e| e.to_string())?;
 
-    // Start it right now, detached from this terminal. If an agent is already running the new one
-    // exits immediately (the port is taken), which is harmless.
+    // Start it right now, detached from this terminal. An agent that is already running is stopped
+    // first, so that after an upgrade the new version really runs (otherwise the new one would exit
+    // at once because the port is taken, and the old code would carry on). Inside a Flatpak the
+    // running agent cannot be signalled from here; it restarts itself on the next phone connection.
+    if !crate::hostenv::in_flatpak() {
+        let _ = Command::new("pkill").args(["-x", "easyremoted"]).output();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
     let started = Command::new("setsid")
         .arg("-f")
         .arg(&daemon)

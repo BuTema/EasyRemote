@@ -82,6 +82,7 @@ fn run(args: &[String]) -> Result<(), String> {
                 cfg.port
             );
             println!("Fingerprint:  {}", id.fingerprint);
+            println!("Build:        {} ({})", easyremote::build_id(), env!("CARGO_PKG_VERSION"));
             println!("Paired:       {}", config::load_devices(&dir).len());
             println!("Pairing open: {}", if pairing::is_open(&dir) { "yes" } else { "no" });
             println!("Config dir:   {}", dir.display());

@@ -262,12 +262,6 @@ fn set_volume(pct: u8) -> bool {
         || run("wpctl", &["set-volume", "@DEFAULT_AUDIO_SINK@", &format!("{:.2}", pct as f32 / 100.0)]).is_some()
 }
 
-fn set_mute(on: bool) -> bool {
-    let v = if on { "1" } else { "0" };
-    run("pactl", &["set-sink-mute", "@DEFAULT_SINK@", v]).is_some()
-        || run("wpctl", &["set-mute", "@DEFAULT_AUDIO_SINK@", v]).is_some()
-}
-
 /// Waits until the system reports the wanted mute state; false if it does not within `total`.
 fn wait_for_mute(want: bool, total: std::time::Duration) -> bool {
     let start = std::time::Instant::now();
@@ -305,20 +299,39 @@ pub fn audio_debug() -> String {
     out
 }
 
+/// True once the system reports the wanted mute state and keeps reporting it a moment later (a
+/// state that flips straight back is not a success).
+fn mute_settled(want: bool) -> bool {
+    wait_for_mute(want, std::time::Duration::from_millis(600)) && {
+        sleep(Duration::from_millis(150));
+        read_volume().map(|v| v.mute == want).unwrap_or(false)
+    }
+}
+
 impl LinuxInput {
-    /// Mutes or unmutes the way a physical mute key does: the desktop's own sound handler toggles
-    /// the output, which also updates its tray icon and on-screen display. Setting the mute flag
-    /// directly (pactl) can leave a desktop that keeps its own idea of the state out of step, with
-    /// the sound still muted while the flag reads "unmuted". If nothing reacts to the key (a bare
-    /// window manager without a media-key daemon), the flag is set directly.
-    fn set_mute_like_the_key(&mut self, want: bool) -> bool {
+    /// Sets the mute state and checks that it took, trying one mechanism after the other:
+    ///  1. the desktop's own mute key: the desktop's sound handler does the toggle, exactly as for a
+    ///     physical key (tray icon, on-screen display and its own bookkeeping stay in step);
+    ///  2. `wpctl` (PipeWire);
+    ///  3. `pactl` (PulseAudio and PipeWire's PulseAudio layer).
+    /// Every step is logged, so that a machine where none of them works can be diagnosed.
+    fn apply_mute(&mut self, want: bool) -> bool {
         self.tap(KeyCode::KEY_MUTE, false);
-        if wait_for_mute(want, std::time::Duration::from_millis(700)) {
+        if mute_settled(want) {
+            info!("mute={want}: done with the mute key");
             return true;
         }
-        info!("mute key had no effect, setting the mute flag directly");
-        set_mute(want);
-        wait_for_mute(want, std::time::Duration::from_millis(400))
+        info!("mute={want}: the mute key did not change it, trying wpctl");
+        run("wpctl", &["set-mute", "@DEFAULT_AUDIO_SINK@", if want { "1" } else { "0" }]);
+        if mute_settled(want) {
+            info!("mute={want}: done with wpctl");
+            return true;
+        }
+        info!("mute={want}: wpctl did not change it, trying pactl");
+        run("pactl", &["set-sink-mute", "@DEFAULT_SINK@", if want { "1" } else { "0" }]);
+        let ok = mute_settled(want);
+        info!("mute={want}: pactl {}", if ok { "worked" } else { "did not work either" });
+        ok
     }
 }
 
@@ -407,10 +420,10 @@ impl InputBackend for LinuxInput {
         match read_volume() {
             Some(cur) => {
                 let next = super::plan_volume(cur, steps);
-                // unmute first so that the new level is audible at once
-                let unmuted = !(cur.mute && !next.mute) || self.set_mute_like_the_key(false);
+                // level first, unmute last: nothing that happens afterwards can undo the unmute
                 let set = set_volume(next.vol);
-                info!("volume: {}% muted={} -> {}% muted={} (unmute ok={}, set ok={})", cur.vol, cur.mute, next.vol, next.mute, unmuted, set);
+                let unmuted = !(cur.mute && !next.mute) || self.apply_mute(false);
+                info!("volume: {}% muted={} -> {}% muted={} (level set ok={}, unmute ok={})", cur.vol, cur.mute, next.vol, next.mute, set, unmuted);
                 // report what the system says now, not what we hoped for
                 read_volume().or(Some(next))
             }
@@ -428,7 +441,7 @@ impl InputBackend for LinuxInput {
     fn mute_toggle(&mut self) -> Option<VolumeState> {
         match read_volume() {
             Some(cur) => {
-                let ok = self.set_mute_like_the_key(!cur.mute);
+                let ok = self.apply_mute(!cur.mute);
                 info!("mute: {} -> {} (ok={})\n{}", cur.mute, !cur.mute, ok, audio_debug());
                 read_volume().or(Some(VolumeState { vol: cur.vol, mute: !cur.mute }))
             }

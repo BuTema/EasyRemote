@@ -56,6 +56,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artem.easyremote.Proto
 import com.artem.easyremote.RemoteController
@@ -150,8 +151,9 @@ private val GROUP_GAP = 24.dp
 /**
  * The control panel: navigation on the left, media on the right, both as two aligned rows.
  *
- *   Esc  .   Up   .  Enter   |  Play/Pause  Fullscreen  Keyboard
- *    .  Left Down Right  .    |  Vol -       Mute        Vol +
+ *   Esc   Up    Enter  |  Play/Pause  Fullscreen  Keyboard
+ *   Left  Down  Right  |  Vol -       Mute        Vol +
+ *                         (volume %, under the media group)
  *
  * Narrow panes (landscape) stack the two groups instead of putting them side by side.
  */
@@ -170,8 +172,8 @@ fun Controls(
         }
     } else {
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
-            NavGroup(c, Modifier.weight(5f))
-            MediaGroup(c, volume, onKeyboard, Modifier.weight(3f))
+            NavGroup(c, Modifier.weight(1f))
+            MediaGroup(c, volume, onKeyboard, Modifier.weight(1f))
         }
     }
 }
@@ -188,17 +190,13 @@ private fun NavGroup(c: RemoteController, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
             Cell { PadButton("Escape", it, label = "Esc") { c.key(Proto.KEY_ESC) } }
-            Cell(null)
             Cell { PadButton("Up", it, icon = Icons.Default.KeyboardArrowUp, repeat = true) { c.key(Proto.KEY_UP) } }
-            Cell(null)
             Cell { PadButton("Enter", it, icon = Icons.Default.KeyboardReturn) { c.key(Proto.KEY_ENTER) } }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
-            Cell(null)
             Cell { PadButton("Left", it, icon = Icons.Default.KeyboardArrowLeft, repeat = true) { c.key(Proto.KEY_LEFT) } }
             Cell { PadButton("Down", it, icon = Icons.Default.KeyboardArrowDown, repeat = true) { c.key(Proto.KEY_DOWN) } }
             Cell { PadButton("Right", it, icon = Icons.Default.KeyboardArrowRight, repeat = true) { c.key(Proto.KEY_RIGHT) } }
-            Cell(null)
         }
     }
 }
@@ -243,6 +241,18 @@ private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () 
                 }
             }
         }
+        // the PC's current volume, right under the volume buttons
+        Text(
+            text = when {
+                volume == null -> ""
+                volume.muted -> "Muted"
+                else -> "${volume.percent}%"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = if (muted) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.fillMaxWidth().height(16.dp),
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

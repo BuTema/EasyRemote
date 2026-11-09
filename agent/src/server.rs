@@ -56,6 +56,7 @@ pub async fn serve(listener: TcpListener, acceptor: TlsAcceptor, shared: Arc<Sha
                 continue;
             }
         };
+        crate::selfupdate::restart_if_replaced();
         if active.load(Ordering::Relaxed) >= MAX_CONNECTIONS {
             drop(tcp);
             continue;
