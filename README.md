@@ -46,7 +46,7 @@ Tip: `alias easyremote='flatpak run io.github.butema.EasyRemote'` makes the comm
 ## Using it
 
 * **Touchpad** (bottom, or right side in landscape): one finger moves, tap = left click, tap-and-hold-and-move = drag, two fingers scroll, two-finger tap = right click. Left / Right buttons below it.
-* **Top (left in landscape):** arrow keys (hold to repeat), Enter in the middle, volume − / + (one step = 5 %, shows the current %), mute, **Esc**, play/pause, fullscreen (F11) and the **keyboard** button, which opens your phone's normal keyboard in any language.
+* **Control panel** (directly above the touchpad, the whole group sits at the bottom of the screen for one-handed use): on the left `Esc` · arrows (hold to repeat) · `Enter`; on the right, top row **Play/Pause**, **Fullscreen** (sends the letter **F**, which most video players use; not F11) and the **keyboard** button (opens your phone's normal keyboard in any language), bottom row **volume −**, **mute** and **volume +** (one step = 5 %). Mute turns red while the PC is muted, and either volume button unmutes. The current volume is shown at the top, and changes made on the PC itself show up on the phone within a couple of seconds.
 * The phone's own volume buttons also control the PC volume while connected (can be turned off in Settings).
 
 ## Agent commands

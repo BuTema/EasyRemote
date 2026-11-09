@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,8 +26,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardReturn
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
@@ -41,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
@@ -67,8 +72,12 @@ fun PadButton(
     label: String? = null,
     icon: ImageVector? = null,
     active: Boolean = false,
+    /** red background (used by Mute while the PC is muted) */
+    danger: Boolean = false,
     repeat: Boolean = false,
     repeatMs: Long = 90L,
+    /** custom content drawn in the foreground colour instead of [icon] / [label] */
+    content: (@Composable (fg: Color) -> Unit)? = null,
     onPress: () -> Unit,
 ) {
     val view = LocalView.current
@@ -77,19 +86,20 @@ fun PadButton(
     var pressed by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
     val bg = when {
+        danger -> if (pressed) Color(0xFFB71C1C) else Color(0xFFD32F2F)
         pressed -> scheme.primary
         active -> scheme.tertiaryContainer
         else -> scheme.secondaryContainer
     }
     val fg = when {
+        danger -> Color.White
         pressed -> scheme.onPrimary
         active -> scheme.onTertiaryContainer
         else -> scheme.onSecondaryContainer
     }
     Box(
         modifier
-            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(bg)
             .semantics(mergeDescendants = true) {
                 contentDescription = description
@@ -120,86 +130,119 @@ fun PadButton(
             },
         contentAlignment = Alignment.Center,
     ) {
+        if (content != null) content(fg)
         if (icon != null) Icon(icon, contentDescription = null, tint = fg)
         if (label != null) Text(label, color = fg, fontWeight = FontWeight.SemiBold)
     }
 }
 
-/** Arrows + Enter, volume column, and the Esc / play-pause / fullscreen / keyboard row. */
+private val CELL_HEIGHT = 50.dp
+private val CELL_GAP = 6.dp
+private val GROUP_GAP = 12.dp
+
+/**
+ * The control panel: navigation on the left, media on the right, both as two aligned rows.
+ *
+ *   Esc  .   Up   .  Enter   |  Play/Pause  Fullscreen  Keyboard
+ *    .  Left Down Right  .    |  Vol -       Mute        Vol +
+ *
+ * Narrow panes (landscape) stack the two groups instead of putting them side by side.
+ */
 @Composable
 fun Controls(
     c: RemoteController,
     volume: VolumeInfo?,
     onKeyboard: () -> Unit,
     modifier: Modifier = Modifier,
+    stacked: Boolean = false,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            DPad(c)
-            VolumePanel(c, volume)
+    if (stacked) {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
+            NavGroup(c, Modifier.fillMaxWidth())
+            MediaGroup(c, volume, onKeyboard, Modifier.fillMaxWidth())
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PadButton("Escape", Modifier.weight(1f).height(52.dp), label = "Esc") { c.key(Proto.KEY_ESC) }
-            PadButton("Play or pause", Modifier.weight(1f).height(52.dp), icon = Icons.Default.PlayArrow) {
-                c.media(Proto.MEDIA_PLAY_PAUSE)
-            }
-            PadButton("Fullscreen (F11)", Modifier.weight(1f).height(52.dp), icon = Icons.Default.Fullscreen) {
-                c.key(Proto.KEY_F11)
-            }
-            PadButton("Open keyboard", Modifier.weight(1f).height(52.dp), icon = Icons.Default.Keyboard) { onKeyboard() }
+    } else {
+        Row(modifier, horizontalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
+            NavGroup(c, Modifier.weight(5f))
+            MediaGroup(c, volume, onKeyboard, Modifier.weight(3f))
+        }
+    }
+}
+
+/** One cell of a grid row: a button, or an empty spacer when [content] is null (not focusable). */
+@Composable
+private fun RowScope.Cell(content: (@Composable (Modifier) -> Unit)?) {
+    val m = Modifier.weight(1f).height(CELL_HEIGHT)
+    if (content != null) content(m) else Spacer(m)
+}
+
+@Composable
+private fun NavGroup(c: RemoteController, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+            Cell { PadButton("Escape", it, label = "Esc") { c.key(Proto.KEY_ESC) } }
+            Cell(null)
+            Cell { PadButton("Up", it, icon = Icons.Default.KeyboardArrowUp, repeat = true) { c.key(Proto.KEY_UP) } }
+            Cell(null)
+            Cell { PadButton("Enter", it, icon = Icons.Default.KeyboardReturn) { c.key(Proto.KEY_ENTER) } }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+            Cell(null)
+            Cell { PadButton("Left", it, icon = Icons.Default.KeyboardArrowLeft, repeat = true) { c.key(Proto.KEY_LEFT) } }
+            Cell { PadButton("Down", it, icon = Icons.Default.KeyboardArrowDown, repeat = true) { c.key(Proto.KEY_DOWN) } }
+            Cell { PadButton("Right", it, icon = Icons.Default.KeyboardArrowRight, repeat = true) { c.key(Proto.KEY_RIGHT) } }
+            Cell(null)
         }
     }
 }
 
 @Composable
-private fun DPad(c: RemoteController) {
-    val size = Modifier.size(56.dp)
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Spacer(size)
-            PadButton("Up", size, icon = Icons.Default.KeyboardArrowUp, repeat = true) { c.key(Proto.KEY_UP) }
-            Spacer(size)
+private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () -> Unit, modifier: Modifier) {
+    val muted = volume?.muted == true
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+            Cell {
+                PadButton("Play or pause", it, content = { fg ->
+                    // both symbols, side by side, in the one button
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Pause, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+                    }
+                }) { c.media(Proto.MEDIA_PLAY_PAUSE) }
+            }
+            // sends the ordinary letter F (not F11): most players use F for fullscreen
+            Cell { PadButton("Fullscreen, sends F", it, icon = Icons.Default.Fullscreen) { c.key(Proto.KEY_F) } }
+            Cell { PadButton("Open keyboard", it, icon = Icons.Default.Keyboard) { onKeyboard() } }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PadButton("Left", size, icon = Icons.Default.KeyboardArrowLeft, repeat = true) { c.key(Proto.KEY_LEFT) }
-            PadButton("Enter", size, icon = Icons.Default.KeyboardReturn) { c.key(Proto.KEY_ENTER) }
-            PadButton("Right", size, icon = Icons.Default.KeyboardArrowRight, repeat = true) { c.key(Proto.KEY_RIGHT) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Spacer(size)
-            PadButton("Down", size, icon = Icons.Default.KeyboardArrowDown, repeat = true) { c.key(Proto.KEY_DOWN) }
-            Spacer(size)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+            Cell {
+                PadButton("Volume down", it, repeat = true, repeatMs = 160, content = { fg -> SpeakerWithSign(Icons.Default.Remove, fg) }) {
+                    c.volumeSteps(-1)
+                }
+            }
+            Cell {
+                // the state shown here is the one the PC reported, not a guess made on the phone
+                PadButton(
+                    description = if (muted) "Unmute" else "Mute",
+                    modifier = it,
+                    icon = if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                    danger = muted,
+                ) { c.toggleMute() }
+            }
+            Cell {
+                PadButton("Volume up", it, repeat = true, repeatMs = 160, content = { fg -> SpeakerWithSign(Icons.Default.Add, fg) }) {
+                    c.volumeSteps(1)
+                }
+            }
         }
     }
 }
 
+/** A small speaker with a clearly visible minus or plus next to it. */
 @Composable
-private fun VolumePanel(c: RemoteController, volume: VolumeInfo?) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            PadButton("Volume down", Modifier.size(56.dp), icon = Icons.Default.Remove, repeat = true, repeatMs = 160) {
-                c.volumeSteps(-1)
-            }
-            Text(
-                text = volume?.let { "${it.percent}%" } ?: "–",
-                modifier = Modifier.width(52.dp),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            )
-            PadButton("Volume up", Modifier.size(56.dp), icon = Icons.Default.Add, repeat = true, repeatMs = 160) {
-                c.volumeSteps(1)
-            }
-        }
-        PadButton(
-            description = if (volume?.muted == true) "Unmute" else "Mute",
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            icon = if (volume?.muted == true) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
-            active = volume?.muted == true,
-        ) { c.toggleMute() }
+private fun SpeakerWithSign(sign: ImageVector, tint: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.VolumeMute, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        Icon(sign, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
     }
 }

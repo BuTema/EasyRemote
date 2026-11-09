@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.artem.easyremote.Proto
 import com.artem.easyremote.RemoteController
@@ -67,13 +68,14 @@ fun Trackpad(
     speed: () -> Float,
     natural: () -> Boolean,
     modifier: Modifier = Modifier,
+    /** fixed pad height (portrait, where the pad hugs the bottom); null = take all remaining height */
+    padHeight: Dp? = null,
 ) {
     val speedNow by rememberUpdatedState(speed)
     val naturalNow by rememberUpdatedState(natural)
     Column(modifier) {
         Box(
-            Modifier
-                .weight(1f)
+            (if (padHeight != null) Modifier.height(padHeight) else Modifier.weight(1f))
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)

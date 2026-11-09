@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +12,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -26,10 +27,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,6 +51,7 @@ import com.artem.easyremote.AppViewModel
 import com.artem.easyremote.ConnState
 import com.artem.easyremote.FailKind
 import com.artem.easyremote.Pc
+import com.artem.easyremote.VolumeInfo
 
 /**
  * Remote control screen.
@@ -70,28 +74,37 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
         onDispose { view.keepScreenOn = false }
     }
 
+    // Outside a Scaffold nothing sets the text colour, so without this the title and the status
+    // text come out black on the dark background.
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
     Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        TopBar(pc.name, state, onBack = { vm.back() })
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        TopBar(pc.name, state, volume, onBack = { vm.back() })
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             if (state is ConnState.Ready) {
                 KeyboardCapture(c, keyboardRequest)
                 if (landscape) {
                     Row(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Controls(
-                            c, volume, onKeyboard = { keyboardRequest++ },
+                            c, volume, onKeyboard = { keyboardRequest++ }, stacked = true,
                             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                         )
                         Trackpad(c, { speed }, { natural }, Modifier.weight(1f).fillMaxHeight())
                     }
                 } else {
-                    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Flexible empty space on top; controls, touchpad and the click buttons form one
+                    // group at the bottom, with small equal gaps and clear of the navigation gestures.
+                    Column(
+                        Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.Bottom,
+                    ) {
                         Controls(c, volume, onKeyboard = { keyboardRequest++ })
-                        Trackpad(c, { speed }, { natural }, Modifier.weight(1f).fillMaxWidth().heightIn(min = 120.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Trackpad(c, { speed }, { natural }, Modifier.fillMaxWidth(), padHeight = touchpadHeightDp(maxHeight.value).dp)
                     }
                 }
             } else {
@@ -99,10 +112,11 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
             }
         }
     }
+    }
 }
 
 @Composable
-private fun TopBar(name: String, state: ConnState, onBack: () -> Unit) {
+private fun TopBar(name: String, state: ConnState, volume: VolumeInfo?, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -115,6 +129,14 @@ private fun TopBar(name: String, state: ConnState, onBack: () -> Unit) {
             is ConnState.Connecting -> Color(0xFFE0A100) to "Connecting…"
             is ConnState.Failed -> MaterialTheme.colorScheme.error to "Offline"
             is ConnState.Idle -> MaterialTheme.colorScheme.outline to ""
+        }
+        if (state is ConnState.Ready && volume != null) {
+            Text(
+                if (volume.muted) "Muted" else "${volume.percent}%",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (volume.muted) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.width(14.dp))
         }
         Box(Modifier.size(8.dp).background(color, CircleShape))
         Spacer(Modifier.width(6.dp))
