@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -70,6 +71,8 @@ fun Trackpad(
     modifier: Modifier = Modifier,
     /** fixed pad height (portrait, where the pad hugs the bottom); null = take all remaining height */
     padHeight: Dp? = null,
+    /** shown between the Left and Right buttons (the connection status) */
+    middle: (@Composable () -> Unit)? = null,
 ) {
     val speedNow by rememberUpdatedState(speed)
     val naturalNow by rememberUpdatedState(natural)
@@ -92,6 +95,9 @@ fun Trackpad(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().height(56.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ClickButton("Left click", "Left", Proto.BTN_LEFT, c, Modifier.weight(1f).fillMaxHeight())
+            if (middle != null) {
+                Box(Modifier.width(84.dp).fillMaxHeight(), contentAlignment = Alignment.Center) { middle() }
+            }
             ClickButton("Right click", "Right", Proto.BTN_RIGHT, c, Modifier.weight(1f).fillMaxHeight())
         }
     }

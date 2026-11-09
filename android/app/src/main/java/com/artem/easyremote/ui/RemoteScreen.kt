@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -56,6 +57,7 @@ import com.artem.easyremote.ConnState
 import com.artem.easyremote.FailKind
 import com.artem.easyremote.Pc
 import com.artem.easyremote.VolumeInfo
+import com.artem.easyremote.TouchMode
 
 /**
  * Remote control screen.
@@ -66,6 +68,7 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
     val c = vm.controller
     val state by c.state.collectAsState()
     val volume by c.volume.collectAsState()
+    val agentBuild by c.agentBuild.collectAsState()
     val natural by vm.settings.naturalScroll.collectAsState()
     val speed by vm.settings.pointerSpeed.collectAsState()
     val keepOn by vm.settings.keepScreenOn.collectAsState()
@@ -78,7 +81,12 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
     val ready = state is ConnState.Ready
     DisposableEffect(ready) {
         val lock = if (ready) lowLatencyWifiLock(appContext) else null
-        onDispose { runCatching { lock?.release() } }
+        // and take touch samples as they happen instead of once per screen refresh
+        TouchMode.unbuffered = ready
+        onDispose {
+            TouchMode.unbuffered = false
+            runCatching { lock?.release() }
+        }
     }
 
     val view = LocalView.current
@@ -96,7 +104,9 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        TopBar(pc.name, state, onBack = { vm.back() })
+        // In portrait the status sits between the Left and Right buttons; elsewhere in the top bar.
+        TopBar(pc.name, state, showStatus = landscape || !ready, onBack = { vm.back() })
+        if (ready && agentBuild == null) OutdatedAgentNotice()
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val bodyHeight = maxHeight // read here: inside the nested Column the scope marker blocks it
             if (state is ConnState.Ready) {
@@ -118,7 +128,11 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
                     ) {
                         Controls(c, volume, onKeyboard = { keyboardRequest++ })
                         Spacer(Modifier.height(8.dp))
-                        Trackpad(c, { speed }, { natural }, Modifier.fillMaxWidth(), padHeight = touchpadHeightDp(bodyHeight.value).dp)
+                        Trackpad(
+                            c, { speed }, { natural }, Modifier.fillMaxWidth(),
+                            padHeight = touchpadHeightDp(bodyHeight.value).dp,
+                            middle = { ConnStatus(state, stacked = true) },
+                        )
                     }
                 }
             } else {
@@ -142,7 +156,7 @@ private fun lowLatencyWifiLock(context: Context): WifiManager.WifiLock? = try {
 }
 
 @Composable
-private fun TopBar(name: String, state: ConnState, onBack: () -> Unit) {
+private fun TopBar(name: String, state: ConnState, showStatus: Boolean, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -150,17 +164,51 @@ private fun TopBar(name: String, state: ConnState, onBack: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
-        val (color, label) = when (state) {
-            is ConnState.Ready -> Color(0xFF2E9E57) to "Connected"
-            is ConnState.Connecting -> Color(0xFFE0A100) to "Connecting…"
-            is ConnState.Failed -> MaterialTheme.colorScheme.error to "Offline"
-            is ConnState.Idle -> MaterialTheme.colorScheme.outline to ""
+        if (showStatus) {
+            ConnStatus(state, stacked = false)
+            Spacer(Modifier.width(12.dp))
         }
-        Box(Modifier.size(8.dp).background(color, CircleShape))
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium)
-        Spacer(Modifier.width(12.dp))
     }
+}
+
+/** Connection state as a coloured dot and a word. [stacked] puts the word under the dot. */
+@Composable
+private fun ConnStatus(state: ConnState, stacked: Boolean) {
+    val (color, label) = when (state) {
+        is ConnState.Ready -> Color(0xFF2E9E57) to "Connected"
+        is ConnState.Connecting -> Color(0xFFE0A100) to "Connecting…"
+        is ConnState.Failed -> MaterialTheme.colorScheme.error to "Offline"
+        is ConnState.Idle -> MaterialTheme.colorScheme.outline to ""
+    }
+    if (stacked) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(8.dp).background(color, CircleShape))
+            Spacer(Modifier.height(4.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).background(color, CircleShape))
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+/** Shown when the PC agent is too old to report its build: it then also lacks recent fixes. */
+@Composable
+private fun OutdatedAgentNotice() {
+    Text(
+        "The EasyRemote agent on this PC is out of date, so some buttons may not work (Fullscreen, Mute). " +
+            "Install the latest version on the PC, then run:  easyremote autostart on",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    )
 }
 
 @Composable

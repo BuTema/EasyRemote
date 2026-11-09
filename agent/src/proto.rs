@@ -62,7 +62,10 @@ pub enum Cmd {
     Button(Button, Action),
     Key(Key, Action),
     Volume(i8),
+    /// toggle mute (payload-less MUTE)
     Mute,
+    /// set mute to a definite value (MUTE with a payload byte: 1 = muted, 0 = unmuted)
+    MuteSet(bool),
     Media(Media),
     Text(String),
 }
@@ -184,7 +187,11 @@ pub fn parse(frame: &[u8]) -> Result<Cmd, &'static str> {
             }
             Ok(Cmd::Volume((p[0] as i8).clamp(-20, 20)))
         }
-        OP_MUTE => Ok(Cmd::Mute),
+        OP_MUTE => match p.len() {
+            0 => Ok(Cmd::Mute),
+            1 if p[0] <= 1 => Ok(Cmd::MuteSet(p[0] == 1)),
+            _ => Err("bad MUTE payload"),
+        },
         OP_MEDIA => {
             if p.len() != 1 {
                 return Err("bad MEDIA length");
@@ -243,6 +250,10 @@ pub fn encode(cmd: &Cmd) -> Vec<u8> {
             v.push(*s as u8);
         }
         Cmd::Mute => v.push(OP_MUTE),
+        Cmd::MuteSet(on) => {
+            v.push(OP_MUTE);
+            v.push(*on as u8);
+        }
         Cmd::Media(m) => {
             v.push(OP_MEDIA);
             v.push(match m {
@@ -276,6 +287,8 @@ mod tests {
             Cmd::Key(Key::F, Action::Click),
             Cmd::Volume(-1),
             Cmd::Mute,
+            Cmd::MuteSet(true),
+            Cmd::MuteSet(false),
             Cmd::Media(Media::PlayPause),
             Cmd::Text("héllo\n".to_string()),
         ];

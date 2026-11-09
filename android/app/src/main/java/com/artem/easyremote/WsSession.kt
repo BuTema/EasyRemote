@@ -56,7 +56,7 @@ data class PairedInfo(val id: String, val token: String, val name: String)
 
 sealed interface Outcome {
     /** Handshake finished; [paired] is set when this was a pairing. */
-    data class Ready(val paired: PairedInfo?, val seenFingerprint: String) : Outcome
+    data class Ready(val paired: PairedInfo?, val seenFingerprint: String, val agentBuild: String? = null) : Outcome
 
     /** The PC answered with an error message (wrong code, unknown token, ...). */
     data class Rejected(val code: String, val message: String) : Outcome
@@ -132,7 +132,7 @@ class WsSession(private val base: OkHttpClient) {
                     "paired" -> paired = PairedInfo(j.optString("id"), j.optString("token"), j.optString("name"))
                     "ready" -> {
                         readyDone = true
-                        result.complete(Outcome.Ready(paired, trust.seen ?: ""))
+                        result.complete(Outcome.Ready(paired, trust.seen ?: "", j.optString("build").ifEmpty { null }))
                     }
                     "state" -> onState?.invoke(j.optInt("vol"), j.optBoolean("mute"))
                     "error" -> {

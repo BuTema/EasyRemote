@@ -79,7 +79,11 @@ object Proto {
     fun volume(steps: Int): ByteArray =
         byteArrayOf(OP_VOLUME.toByte(), steps.coerceIn(-20, 20).toByte())
 
+    /** toggle mute on the PC */
     fun mute(): ByteArray = byteArrayOf(OP_MUTE.toByte())
+
+    /** set mute to a definite state (needs a PC agent that knows it; older agents ignore it) */
+    fun muteSet(on: Boolean): ByteArray = byteArrayOf(OP_MUTE.toByte(), if (on) 1 else 0)
 
     fun media(action: Int): ByteArray = byteArrayOf(OP_MEDIA.toByte(), action.toByte())
 

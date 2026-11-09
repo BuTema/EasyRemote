@@ -59,7 +59,7 @@ The phone stores `id`, `token`, the fingerprint and the PC name. The agent store
 
 ### Result
 
-On success the server sends `{"t":"ready"}` and then, if it can read the audio state, `{"t":"state","vol":45,"mute":false}`.
+On success the server sends `{"t":"ready","build":"<agent build id>"}` (`build` is absent in agents older than the one that introduced it; a phone may treat that as "agent out of date") and then, if it can read the audio state, `{"t":"state","vol":45,"mute":false}`.
 
 On failure the server sends and closes:
 
@@ -80,7 +80,7 @@ First byte is the opcode, multi-byte integers are **big-endian**.
 | 0x03 | BUTTON | `u8 button, u8 action` | button: 0 left, 1 right, 2 middle. action: 0 release, 1 press, 2 click. |
 | 0x04 | KEY    | `u8 key, u8 action` | See key table. action as above. |
 | 0x05 | VOLUME | `i8 steps` | One step = 5 % of master volume. Clamped to 0–100. |
-| 0x06 | MUTE   | – | Toggle mute. |
+| 0x06 | MUTE   | – or `u8 on` | No payload: toggle mute. One payload byte: set mute to a definite state (1 = muted, 0 = unmuted). |
 | 0x07 | MEDIA  | `u8 action` | 1 play/pause, 2 next, 3 previous, 4 stop. |
 | 0x08 | TEXT   | UTF-8, ≤ 256 bytes | Type these characters (`\n` = Enter). |
 

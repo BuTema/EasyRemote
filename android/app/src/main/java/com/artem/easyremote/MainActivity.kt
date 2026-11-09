@@ -3,6 +3,7 @@ package com.artem.easyremote
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -54,6 +55,13 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         vm.onBackground()
         super.onStop()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (TouchMode.unbuffered && ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            window.decorView.requestUnbufferedDispatch(ev)
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {

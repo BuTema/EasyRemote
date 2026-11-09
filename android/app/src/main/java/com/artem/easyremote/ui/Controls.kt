@@ -44,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -228,12 +229,13 @@ private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () 
             }
             Cell {
                 // the state shown here is the one the PC reported, not a guess made on the phone
+                // always the muted-speaker icon; only the colour tells the state (red = muted)
                 PadButton(
                     description = if (muted) "Unmute" else "Mute",
                     modifier = it,
-                    icon = if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                    icon = Icons.Default.VolumeOff,
                     danger = muted,
-                ) { c.toggleMute() }
+                ) { if (volume == null) c.toggleMute() else c.setMute(!muted) }
             }
             Cell {
                 PadButton("Volume up", it, repeat = true, repeatMs = 160, content = { fg -> SpeakerWithSign(Icons.Default.Add, fg) }) {
@@ -241,36 +243,45 @@ private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () 
                 }
             }
         }
-        // the PC's current volume, right under the volume buttons
-        Text(
-            text = when {
-                volume == null -> ""
-                volume.muted -> "Muted"
-                else -> "${volume.percent}%"
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = if (muted) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.fillMaxWidth().height(16.dp),
-            textAlign = TextAlign.Center,
-        )
+        // the PC's volume as a bar under the volume buttons (red while muted)
+        VolumeBar(volume)
     }
 }
 
 /**
- * A small speaker with a clearly visible minus or plus touching it. The speaker glyph has empty
+ * A small speaker with a clearly visible minus or plus 2 dp beside it. The speaker glyph has empty
  * space to its right inside its 24-unit square and the sign glyph has some on its left, so the sign
  * is pulled in by exactly that much instead of being laid out next to the square.
  */
 @Composable
 private fun SpeakerWithSign(sign: ImageVector, tint: Color) {
-    Box(Modifier.size(width = 32.dp, height = 22.dp)) {
+    Box(Modifier.size(width = 34.dp, height = 22.dp)) {
         Icon(
             Icons.Default.VolumeMute, contentDescription = null, tint = tint,
             modifier = Modifier.size(22.dp).align(Alignment.CenterStart),
         )
         Icon(
             sign, contentDescription = null, tint = tint,
-            modifier = Modifier.size(18.dp).align(Alignment.CenterStart).offset(x = 11.dp),
+            modifier = Modifier.size(18.dp).align(Alignment.CenterStart).offset(x = 13.dp), // 11 dp = touching, plus a 2 dp gap
         )
+    }
+}
+
+/** Read-only volume level: a thin bar under the volume buttons. */
+@Composable
+private fun VolumeBar(volume: VolumeInfo?) {
+    val level = ((volume?.percent ?: 0).coerceIn(0, 100)) / 100f
+    val muted = volume?.muted == true
+    val fill = if (muted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(16.dp)
+            .semantics { contentDescription = if (volume == null) "Volume unknown" else "Volume ${volume.percent} percent" + if (muted) ", muted" else "" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.secondaryContainer)) {
+            Box(Modifier.fillMaxWidth(level).fillMaxHeight().background(fill))
+        }
     }
 }

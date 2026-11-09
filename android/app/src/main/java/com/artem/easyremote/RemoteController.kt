@@ -40,6 +40,11 @@ class RemoteController(
     private val _volume = MutableStateFlow<VolumeInfo?>(null)
     val volume: StateFlow<VolumeInfo?> = _volume
 
+    private val _agentBuild = MutableStateFlow<String?>(null)
+
+    /** Build id the PC agent reported when connecting; null = an agent too old to report one. */
+    val agentBuild: StateFlow<String?> = _agentBuild
+
     private var job: Job? = null
 
     @Volatile
@@ -123,6 +128,7 @@ class RemoteController(
                         onAddressChanged()
                     }
                     session = a.session
+                    _agentBuild.value = out.agentBuild
                     _state.value = ConnState.Ready
                     val t0 = SystemClock.elapsedRealtime()
                     try {
@@ -168,7 +174,7 @@ class RemoteController(
 
     // Pointer movement and scrolling are coalesced, never dropped: the pending deltas are summed, so
     // the total displacement is exact. A frame goes out immediately whenever the link is idle (no
-    // added latency) and at most every MIN_FRAME_MS (250 per second). While the network is behind
+    // added latency) and at most every MIN_FRAME_MS (over 300 per second). While the network is behind
     // (bytes still queued in the socket) new movement keeps adding up in the pending sum instead of
     // piling up as stale frames, so the cursor never keeps running after the finger has stopped.
     private var pendingDx = 0
@@ -286,6 +292,11 @@ class RemoteController(
         send(Proto.mute())
     }
 
+    /** Mute or unmute to a definite state. */
+    fun setMute(on: Boolean) {
+        send(Proto.muteSet(on))
+    }
+
     fun media(action: Int) {
         send(Proto.media(action))
     }
@@ -297,7 +308,7 @@ class RemoteController(
     }
 
     companion object {
-        private const val MIN_FRAME_MS = 4L
+        private const val MIN_FRAME_MS = 3L
         private const val BACKLOG_BYTES = 256L
         private const val MAX_FAILURES = 5
     }

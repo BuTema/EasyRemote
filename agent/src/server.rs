@@ -215,7 +215,7 @@ async fn handle(tcp: TcpStream, acceptor: TlsAcceptor, shared: &Shared) -> Resul
         }
     }
 
-    tx.send(Message::text(r#"{"t":"ready"}"#)).await.map_err(|e| e.to_string())?;
+    tx.send(Message::text(format!(r#"{{"t":"ready","build":"{}"}}"#, crate::build_id()))).await.map_err(|e| e.to_string())?;
 
     // state updates (volume) are produced on the input thread and forwarded here
     let (state_tx, mut state_rx) = unbounded_channel::<String>();

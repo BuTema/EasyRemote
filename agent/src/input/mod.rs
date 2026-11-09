@@ -47,6 +47,14 @@ pub trait InputBackend: Send {
     /// Change master volume by `steps` * 5 %. Returns the new state if it can be determined.
     fn volume_step(&mut self, steps: i8) -> Option<VolumeState>;
     fn mute_toggle(&mut self) -> Option<VolumeState>;
+    /// Mute or unmute to a definite state (a second press on the phone must always undo the first,
+    /// whatever the phone believed the state to be).
+    fn mute_set(&mut self, on: bool) -> Option<VolumeState> {
+        match self.volume_state() {
+            Some(s) if s.mute == on => Some(s),
+            _ => self.mute_toggle(),
+        }
+    }
     fn volume_state(&mut self) -> Option<VolumeState>;
 }
 
@@ -209,6 +217,10 @@ pub struct PointerSmoother {
     rem_y: f32,
     acc_x: f32,
     acc_y: f32,
+    /// drain time constant (ms); follows how often movement arrives
+    tau_ms: f32,
+    /// smoothed gap between arriving movement frames (ms)
+    gap_ms: f32,
 }
 
 pub const SMOOTH_TICK: Duration = Duration::from_millis(2);
@@ -217,7 +229,17 @@ pub const SMOOTH_TAU_MS: f32 = 6.0;
 
 impl PointerSmoother {
     pub fn new() -> Self {
-        PointerSmoother { rem_x: 0.0, rem_y: 0.0, acc_x: 0.0, acc_y: 0.0 }
+        PointerSmoother { rem_x: 0.0, rem_y: 0.0, acc_x: 0.0, acc_y: 0.0, tau_ms: SMOOTH_TAU_MS, gap_ms: 8.0 }
+    }
+
+    /// Reports that a movement frame arrived `gap_ms` after the previous one. The faster frames
+    /// arrive the less smoothing is needed, so the delay shrinks with the gap: about 0.8 of it,
+    /// between 2.5 ms and [`SMOOTH_TAU_MS`]. (Gaps over 60 ms are a new gesture and are ignored.)
+    pub fn observe_gap(&mut self, gap_ms: f32) {
+        if gap_ms <= 60.0 {
+            self.gap_ms += 0.3 * (gap_ms.max(0.5) - self.gap_ms);
+            self.tau_ms = (0.8 * self.gap_ms).clamp(2.5, SMOOTH_TAU_MS);
+        }
     }
 
     pub fn add(&mut self, dx: i32, dy: i32) {
@@ -231,7 +253,7 @@ impl PointerSmoother {
 
     /// Movement to apply now, `dt_ms` after the previous step.
     pub fn step(&mut self, dt_ms: f32) -> (i32, i32) {
-        let a = 1.0 - (-dt_ms.clamp(0.5, 10.0) / SMOOTH_TAU_MS).exp();
+        let a = 1.0 - (-dt_ms.clamp(0.5, 10.0) / self.tau_ms).exp();
         let tx = Self::share(self.rem_x, a);
         let ty = Self::share(self.rem_y, a);
         self.rem_x -= tx;
@@ -242,7 +264,10 @@ impl PointerSmoother {
     /// Everything that is still pending, right now.
     pub fn flush(&mut self) -> (i32, i32) {
         let (x, y) = (self.rem_x + self.acc_x, self.rem_y + self.acc_y);
+        let (tau, gap) = (self.tau_ms, self.gap_ms);
         *self = PointerSmoother::new();
+        self.tau_ms = tau;
+        self.gap_ms = gap;
         (x.round() as i32, y.round() as i32)
     }
 
@@ -272,6 +297,7 @@ fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>, smooth: b
     let mut held_keys: HashSet<Key> = HashSet::new();
     let mut smoother = PointerSmoother::new();
     let mut last_step = Instant::now();
+    let mut last_move_at: Option<Instant> = None;
 
     if smooth {
         raise_timer_resolution();
@@ -317,6 +343,11 @@ fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>, smooth: b
                 let state = match cmd {
                     Cmd::Move { dx, dy } => {
                         if smooth {
+                            let now = Instant::now();
+                            if let Some(prev) = last_move_at {
+                                smoother.observe_gap(now.duration_since(prev).as_secs_f32() * 1000.0);
+                            }
+                            last_move_at = Some(now);
                             smoother.add(dx, dy);
                         } else {
                             backend.mouse_move(dx, dy);
@@ -367,6 +398,7 @@ fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>, smooth: b
                     }
                     Cmd::Volume(steps) => backend.volume_step(steps),
                     Cmd::Mute => backend.mute_toggle(),
+                    Cmd::MuteSet(on) => backend.mute_set(on),
                 };
                 if let (Some(state), Some(reply)) = (state, reply) {
                     let _ = reply.send(state_json(state));
