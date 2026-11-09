@@ -43,6 +43,7 @@ object Proto {
     const val KEY_PAGEUP = 13
     const val KEY_PAGEDOWN = 14
     const val KEY_F11 = 15
+    const val KEY_F = 16
 
     const val MEDIA_PLAY_PAUSE = 1
     const val MEDIA_NEXT = 2

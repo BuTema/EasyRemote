@@ -84,7 +84,7 @@ First byte is the opcode, multi-byte integers are **big-endian**.
 | 0x07 | MEDIA  | `u8 action` | 1 play/pause, 2 next, 3 previous, 4 stop. |
 | 0x08 | TEXT   | UTF-8, ≤ 256 bytes | Type these characters (`\n` = Enter). |
 
-Key table: 1 Left, 2 Right, 3 Up, 4 Down, 5 Esc, 6 Enter, 7 Backspace, 8 Space, 9 Tab, 10 Delete, 11 Home, 12 End, 13 PageUp, 14 PageDown, 15 F11.
+Key table: 1 Left, 2 Right, 3 Up, 4 Down, 5 Esc, 6 Enter, 7 Backspace, 8 Space, 9 Tab, 10 Delete, 11 Home, 12 End, 13 PageUp, 14 PageDown, 15 F11, 16 F (the ordinary letter key).
 
 Unknown opcodes and malformed frames are ignored. When a connection closes for any reason the agent releases every button/key that is still held.
 

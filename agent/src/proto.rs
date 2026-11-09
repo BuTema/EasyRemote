@@ -43,6 +43,8 @@ pub enum Key {
     PageUp,
     PageDown,
     F11,
+    /// the ordinary letter F (video players: fullscreen)
+    F,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,7 +90,7 @@ impl Action {
 }
 
 impl Key {
-    pub const ALL: [Key; 15] = [
+    pub const ALL: [Key; 16] = [
         Key::Left,
         Key::Right,
         Key::Up,
@@ -104,6 +106,7 @@ impl Key {
         Key::PageUp,
         Key::PageDown,
         Key::F11,
+        Key::F,
     ];
 
     /// Wire code, 1-based. Must match the table in PROTOCOL.md.
@@ -270,6 +273,7 @@ mod tests {
             Cmd::Button(Button::Left, Action::Press),
             Cmd::Key(Key::Escape, Action::Click),
             Cmd::Key(Key::F11, Action::Click),
+            Cmd::Key(Key::F, Action::Click),
             Cmd::Volume(-1),
             Cmd::Mute,
             Cmd::Media(Media::PlayPause),
@@ -288,6 +292,7 @@ mod tests {
         assert_eq!(Key::Backspace.code(), 7);
         assert_eq!(Key::PageDown.code(), 14);
         assert_eq!(Key::F11.code(), 15);
+        assert_eq!(Key::F.code(), 16);
     }
 
     #[test]

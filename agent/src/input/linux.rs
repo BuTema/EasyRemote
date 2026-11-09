@@ -108,6 +108,7 @@ fn key_code(k: Key) -> KeyCode {
         Key::PageUp => KeyCode::KEY_PAGEUP,
         Key::PageDown => KeyCode::KEY_PAGEDOWN,
         Key::F11 => KeyCode::KEY_F11,
+        Key::F => KeyCode::KEY_F,
     }
 }
 
@@ -207,8 +208,16 @@ fn set_clipboard(s: &str) -> bool {
 
 // ------------------------------------------------------------------ volume helpers
 
+/// Runs `cmd` on the host with the C locale: pactl / wpctl translate their output ("Mute: yes"
+/// becomes e.g. "Приглушено: так" on a Ukrainian or Russian desktop), which made the mute state
+/// unreadable and the volume buttons appear dead after Mute.
 fn run(cmd: &str, args: &[&str]) -> Option<String> {
-    let out = host_command(cmd).args(args).stderr(Stdio::null()).output().ok()?;
+    let out = host_command("env")
+        .args(["LC_ALL=C", "LANG=C", "LANGUAGE=C", cmd])
+        .args(args)
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
@@ -343,14 +352,13 @@ impl InputBackend for LinuxInput {
     fn volume_step(&mut self, steps: i8) -> Option<VolumeState> {
         match read_volume() {
             Some(cur) => {
-                let new = (cur.vol as i32 + steps as i32 * 5).clamp(0, 100) as u8;
-                set_volume(new);
-                let mut mute = cur.mute;
-                if mute && steps > 0 {
-                    set_mute(false);
-                    mute = false;
-                }
-                Some(VolumeState { vol: new, mute })
+                let next = super::plan_volume(cur, steps);
+                // unmute first so that the new level is audible at once
+                let unmuted = !(cur.mute && !next.mute) || set_mute(false);
+                let set = set_volume(next.vol);
+                info!("volume: {}% muted={} -> {}% muted={} (unmute ok={}, set ok={})", cur.vol, cur.mute, next.vol, next.mute, unmuted, set);
+                // report what the system says now, not what we hoped for
+                read_volume().or(Some(next))
             }
             None => {
                 // No pactl / wpctl: fall back to the desktop's own volume keys (step size is up to the desktop).
@@ -366,8 +374,9 @@ impl InputBackend for LinuxInput {
     fn mute_toggle(&mut self) -> Option<VolumeState> {
         match read_volume() {
             Some(cur) => {
-                set_mute(!cur.mute);
-                Some(VolumeState { vol: cur.vol, mute: !cur.mute })
+                let ok = set_mute(!cur.mute);
+                info!("mute: {} -> {} (ok={})", cur.mute, !cur.mute, ok);
+                read_volume().or(Some(VolumeState { vol: cur.vol, mute: !cur.mute }))
             }
             None => {
                 self.tap(KeyCode::KEY_MUTE, false);

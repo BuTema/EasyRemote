@@ -17,6 +17,12 @@ pub struct VolumeState {
     pub mute: bool,
 }
 
+/// What a volume button press should result in: the level moves by `steps` * 5 % (kept within
+/// 0..=100) and audio is always unmuted, whichever button was pressed and also at the limits.
+pub fn plan_volume(cur: VolumeState, steps: i8) -> VolumeState {
+    VolumeState { vol: (cur.vol.min(100) as i32 + steps as i32 * 5).clamp(0, 100) as u8, mute: if steps != 0 { false } else { cur.mute } }
+}
+
 pub trait InputBackend: Send {
     fn mouse_move(&mut self, dx: i32, dy: i32);
     /// Hi-res wheel units, 120 = one notch. +dy up, +dx right.
@@ -104,10 +110,9 @@ impl InputBackend for MockBackend {
         self.rec(format!("media {:?}", m));
     }
     fn volume_step(&mut self, steps: i8) -> Option<VolumeState> {
-        self.vol = (self.vol as i32 + steps as i32 * 5).clamp(0, 100) as u8;
-        if steps > 0 {
-            self.mute = false;
-        }
+        let next = plan_volume(self.state(), steps);
+        self.vol = next.vol;
+        self.mute = next.mute;
         self.rec(format!("volume {} {}", self.vol, self.mute));
         Some(self.state())
     }
@@ -241,5 +246,41 @@ fn worker(mut backend: Box<dyn InputBackend>, rx: mpsc::Receiver<Msg>) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod volume_tests {
+    use super::*;
+
+    fn st(vol: u8, mute: bool) -> VolumeState {
+        VolumeState { vol, mute }
+    }
+
+    #[test]
+    fn steps_are_five_percent_and_clamped() {
+        assert_eq!(plan_volume(st(50, false), 1), st(55, false));
+        assert_eq!(plan_volume(st(50, false), -2), st(40, false));
+        assert_eq!(plan_volume(st(98, false), 1), st(100, false));
+        assert_eq!(plan_volume(st(100, false), 1), st(100, false));
+        assert_eq!(plan_volume(st(3, false), -1), st(0, false));
+        assert_eq!(plan_volume(st(0, false), -1), st(0, false));
+    }
+
+    #[test]
+    fn either_button_unmutes_even_at_the_limits() {
+        assert_eq!(plan_volume(st(50, true), 1), st(55, false));
+        assert_eq!(plan_volume(st(50, true), -1), st(45, false));
+        assert_eq!(plan_volume(st(100, true), 1), st(100, false));
+        assert_eq!(plan_volume(st(0, true), -1), st(0, false));
+    }
+
+    #[test]
+    fn mock_backend_follows_the_plan() {
+        let (mut m, _) = MockBackend::new();
+        assert_eq!(m.mute_toggle(), Some(st(50, true)));
+        assert_eq!(m.volume_step(-1), Some(st(45, false)));
+        assert_eq!(m.mute_toggle(), Some(st(45, true)));
+        assert_eq!(m.mute_toggle(), Some(st(45, false)));
     }
 }

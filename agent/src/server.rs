@@ -21,6 +21,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(45);
+const STATE_POLL: Duration = Duration::from_secs(2);
 const MAX_CONNECTIONS: usize = 8;
 const MAX_FRAME: usize = 4096;
 
@@ -219,6 +220,13 @@ async fn handle(tcp: TcpStream, acceptor: TlsAcceptor, shared: &Shared) -> Resul
     let (state_tx, mut state_rx) = unbounded_channel::<String>();
     shared.input.query(state_tx.clone());
 
+    // Keep the phone's volume / mute display in step with the PC even when the change was made on
+    // the PC itself (system tray, keyboard keys): ask the input thread every couple of seconds
+    // and forward only what changed. Only runs while a phone is connected.
+    let mut poll = tokio::time::interval(STATE_POLL);
+    poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut last_state = String::new();
+
     let mut deadline = Instant::now() + IDLE_TIMEOUT;
     loop {
         tokio::select! {
@@ -237,7 +245,13 @@ async fn handle(tcp: TcpStream, acceptor: TlsAcceptor, shared: &Shared) -> Resul
                 }
             }
             Some(state) = state_rx.recv() => {
-                tx.send(Message::text(state)).await.map_err(|e| e.to_string())?;
+                if state != last_state {
+                    last_state = state.clone();
+                    tx.send(Message::text(state)).await.map_err(|e| e.to_string())?;
+                }
+            }
+            _ = poll.tick() => {
+                shared.input.query(state_tx.clone());
             }
             _ = tokio::time::sleep_until(deadline) => {
                 return Err("idle timeout".into());

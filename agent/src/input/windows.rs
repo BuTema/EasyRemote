@@ -82,6 +82,7 @@ fn vk_of(k: Key) -> (VIRTUAL_KEY, bool) {
         Key::PageUp => (VK_PRIOR, true),
         Key::PageDown => (VK_NEXT, true),
         Key::F11 => (VK_F11, false),
+        Key::F => (VIRTUAL_KEY(0x46), false), // the letter F
     }
 }
 
@@ -160,14 +161,16 @@ impl InputBackend for WindowsInput {
         let ep = self.endpoint()?;
         unsafe {
             let cur = ep.GetMasterVolumeLevelScalar().ok()?;
-            let pct = ((cur * 100.0).round() as i32 + steps as i32 * 5).clamp(0, 100);
-            ep.SetMasterVolumeLevelScalar(pct as f32 / 100.0, &GUID::zeroed()).ok()?;
-            let mut muted = ep.GetMute().map(|b| b.as_bool()).unwrap_or(false);
-            if muted && steps > 0 {
+            let muted_now = ep.GetMute().map(|b| b.as_bool()).unwrap_or(false);
+            let next = super::plan_volume(
+                VolumeState { vol: (cur * 100.0).round().clamp(0.0, 100.0) as u8, mute: muted_now },
+                steps,
+            );
+            if muted_now && !next.mute {
                 let _ = ep.SetMute(false, &GUID::zeroed());
-                muted = false;
             }
-            Some(VolumeState { vol: pct as u8, mute: muted })
+            ep.SetMasterVolumeLevelScalar(next.vol as f32 / 100.0, &GUID::zeroed()).ok()?;
+            Some(next)
         }
     }
 
