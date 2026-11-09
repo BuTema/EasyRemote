@@ -4,7 +4,16 @@ import android.app.Application
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
+import java.net.InetSocketAddress
+import java.net.Socket
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -49,6 +58,53 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val controller = RemoteController(viewModelScope, http, store, discovery) { _pcs.value = store.all() }
 
+    // ------------------------------------------------------------------ reachability
+
+    private val _online = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Fingerprints of the PCs that answered a quick TCP connect to their agent port. mDNS alone is
+     * a poor "is it there" signal: Android drops and misses its announcements, so a PC that was
+     * connected a second ago would show as unseen. This probe is what the list's status is based on.
+     */
+    val online: StateFlow<Set<String>> = _online
+    private var probeJob: Job? = null
+
+    private fun startProbing() {
+        probeJob?.cancel()
+        probeJob = viewModelScope.launch {
+            while (true) {
+                if (_screen.value is Screen.List) {
+                    val pcs = store.all()
+                    val up = coroutineScope {
+                        pcs.map { pc -> async { if (reachable(pc)) pc.fingerprint else null } }.awaitAll()
+                    }.filterNotNull().toSet()
+                    _online.value = up
+                }
+                delay(if (_online.value.size < store.all().size) 4_000 else 10_000)
+            }
+        }
+    }
+
+    private fun stopProbing() {
+        probeJob?.cancel()
+        probeJob = null
+    }
+
+    private suspend fun reachable(pc: Pc): Boolean = withContext(Dispatchers.IO) {
+        val targets = buildList {
+            discovery.found.value[pc.shortId]?.let { add(it.host to it.port) }
+            add(pc.host to pc.port)
+        }.distinct()
+        targets.any { (host, port) ->
+            try {
+                Socket().use { it.connect(InetSocketAddress(host, port), 1_200); true }
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
+
     private fun refresh() {
         _pcs.value = store.all()
     }
@@ -71,7 +127,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun back() {
-        if (_screen.value is Screen.Remote) controller.stop()
+        val leaving = _screen.value as? Screen.Remote
+        if (leaving != null) {
+            // it was connected a moment ago: say so right away, the probe confirms within seconds
+            if (controller.state.value == ConnState.Ready) _online.value = _online.value + leaving.fingerprint
+            controller.stop()
+        }
         _pair.value = PairUi.Idle
         _screen.value = Screen.List
     }
@@ -85,6 +146,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Activity came to the foreground. */
     fun onForeground() {
         discovery.start()
+        startProbing()
         if (_screen.value is Screen.Add) paywall.refresh() // e.g. back from the purchase sheet
         val s = _screen.value
         if (s is Screen.Remote) {
@@ -95,6 +157,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Activity left the foreground: stop everything that uses the radio. */
     fun onBackground() {
         discovery.stop()
+        stopProbing()
         controller.stop()
     }
 

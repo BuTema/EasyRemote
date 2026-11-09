@@ -54,6 +54,7 @@ import com.artem.easyremote.Pc
 fun PcListScreen(vm: AppViewModel) {
     val pcs by vm.pcs.collectAsState()
     val found by vm.discovery.found.collectAsState()
+    val online by vm.online.collectAsState()
     var forgetting by remember { mutableStateOf<Pc?>(null) }
 
     Scaffold(
@@ -95,7 +96,7 @@ fun PcListScreen(vm: AppViewModel) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(pcs, key = { it.fingerprint }) { pc ->
-                    val nearby = found.containsKey(pc.shortId)
+                    val nearby = found.containsKey(pc.shortId) || online.contains(pc.fingerprint)
                     PcCard(pc, nearby, onOpen = { vm.openRemote(pc) }, onForget = { forgetting = pc })
                 }
             }
@@ -136,7 +137,7 @@ private fun PcCard(pc: Pc, nearby: Boolean, onOpen: () -> Unit, onForget: () -> 
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        if (nearby) "On this network" else "Not seen yet · last ${pc.host}",
+                        if (nearby) "Online" else "Not reachable · last ${pc.host}",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }

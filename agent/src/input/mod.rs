@@ -56,7 +56,16 @@ pub trait InputBackend: Send {
         }
     }
     fn volume_state(&mut self) -> Option<VolumeState>;
+
+    /// A reader for the volume state that is safe to call from another thread. A backend whose
+    /// reading is slow (it runs `pactl`) returns one, so that polling never holds up the input
+    /// thread: a poll that takes a few hundred milliseconds would otherwise freeze the cursor.
+    fn volume_reader(&self) -> Option<VolumeReader> {
+        None
+    }
 }
+
+pub type VolumeReader = Box<dyn Fn() -> Option<VolumeState> + Send + 'static>;
 
 pub fn create_real() -> Result<Box<dyn InputBackend>, String> {
     #[cfg(target_os = "linux")]
@@ -161,6 +170,8 @@ enum Msg {
 #[derive(Clone)]
 pub struct InputHandle {
     tx: mpsc::Sender<Msg>,
+    /// present when state reads happen on their own thread (see [`InputBackend::volume_reader`])
+    query_tx: Option<mpsc::Sender<Reply>>,
 }
 
 fn state_json(v: VolumeState) -> String {
@@ -181,11 +192,33 @@ impl InputHandle {
 
     fn start(backend: Box<dyn InputBackend>, smooth: bool) -> InputHandle {
         let (tx, rx) = mpsc::channel::<Msg>();
+        let query_tx = backend.volume_reader().map(|read| {
+            let (qtx, qrx) = mpsc::channel::<Reply>();
+            std::thread::Builder::new()
+                .name("volume-poll".into())
+                .spawn(move || {
+                    while let Ok(reply) = qrx.recv() {
+                        // polls that piled up while one was running need only one answer
+                        let mut replies = vec![reply];
+                        while let Ok(r) = qrx.try_recv() {
+                            replies.push(r);
+                        }
+                        if let Some(state) = read() {
+                            let json = state_json(state);
+                            for r in replies {
+                                let _ = r.send(json.clone());
+                            }
+                        }
+                    }
+                })
+                .expect("failed to start volume thread");
+            qtx
+        });
         std::thread::Builder::new()
             .name("input".into())
             .spawn(move || worker(backend, rx, smooth))
             .expect("failed to start input thread");
-        InputHandle { tx }
+        InputHandle { tx, query_tx }
     }
 
     pub fn send(&self, cmd: Cmd, reply: Option<Reply>) {
@@ -194,7 +227,14 @@ impl InputHandle {
 
     /// Ask for the current volume state; the answer arrives on `reply`.
     pub fn query(&self, reply: Reply) {
-        let _ = self.tx.send(Msg::Query(reply));
+        match &self.query_tx {
+            Some(q) => {
+                let _ = q.send(reply);
+            }
+            None => {
+                let _ = self.tx.send(Msg::Query(reply));
+            }
+        }
     }
 
     /// Release every button / key that a vanished phone might have left pressed.

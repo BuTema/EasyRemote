@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,11 +26,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardReturn
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -227,7 +224,7 @@ private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () 
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
             Cell {
-                PadButton("Volume down", it, repeat = true, repeatMs = 160, content = { fg -> SpeakerWithSign(Icons.Default.Remove, fg) }) {
+                PadButton("Volume down", it, icon = Icons.Default.VolumeDown, repeat = true, repeatMs = 160) {
                     c.volumeSteps(-1)
                 }
             }
@@ -242,32 +239,13 @@ private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () 
                 ) { if (volume == null) c.toggleMute() else c.setMute(!muted) }
             }
             Cell {
-                PadButton("Volume up", it, repeat = true, repeatMs = 160, content = { fg -> SpeakerWithSign(Icons.Default.Add, fg) }) {
+                PadButton("Volume up", it, icon = Icons.Default.VolumeUp, repeat = true, repeatMs = 160) {
                     c.volumeSteps(1)
                 }
             }
         }
         // the PC's volume as a bar under the volume buttons (red while muted)
         VolumeBar(volume)
-    }
-}
-
-/**
- * A small speaker with a clearly visible minus or plus 2 dp beside it. The speaker glyph has empty
- * space to its right inside its 24-unit square and the sign glyph has some on its left, so the sign
- * is pulled in by exactly that much instead of being laid out next to the square.
- */
-@Composable
-private fun SpeakerWithSign(sign: ImageVector, tint: Color) {
-    Box(Modifier.size(width = 34.dp, height = 22.dp)) {
-        Icon(
-            Icons.Default.VolumeMute, contentDescription = null, tint = tint,
-            modifier = Modifier.size(22.dp).align(Alignment.CenterStart),
-        )
-        Icon(
-            sign, contentDescription = null, tint = tint,
-            modifier = Modifier.size(18.dp).align(Alignment.CenterStart).offset(x = 13.dp), // 11 dp = touching, plus a 2 dp gap
-        )
     }
 }
 

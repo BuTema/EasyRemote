@@ -105,8 +105,9 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        // While connected the status sits under the arrow keys (opposite the volume bar); otherwise here.
-        TopBar(pc.name, state, showStatus = !ready, onBack = { vm.back() })
+        // While connected the status sits under the arrow keys; the connecting screen has its own spinner,
+        // so the top bar only shows the status after a failure.
+        TopBar(pc.name, state, showStatus = state is ConnState.Failed, onBack = { vm.back() })
         if (ready && agentBuild == null) OutdatedAgentNotice()
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val bodyHeight = maxHeight // read here: inside the nested Column the scope marker blocks it

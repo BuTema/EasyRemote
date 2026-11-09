@@ -455,6 +455,10 @@ impl InputBackend for LinuxInput {
     fn volume_state(&mut self) -> Option<VolumeState> {
         read_volume()
     }
+
+    fn volume_reader(&self) -> Option<super::VolumeReader> {
+        Some(Box::new(read_volume))
+    }
 }
 
 #[cfg(test)]
