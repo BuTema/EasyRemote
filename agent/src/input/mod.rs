@@ -263,7 +263,7 @@ impl PointerSmoother {
 fn raise_timer_resolution() {
     #[cfg(windows)]
     unsafe {
-        let _ = windows::Win32::Media::timeBeginPeriod(1);
+        let _ = ::windows::Win32::Media::timeBeginPeriod(1); // `::` = the crate, not our own input/windows.rs
     }
 }
 
