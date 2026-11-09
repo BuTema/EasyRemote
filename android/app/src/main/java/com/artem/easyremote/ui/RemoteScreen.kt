@@ -85,6 +85,7 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
     ) {
         TopBar(pc.name, state, volume, onBack = { vm.back() })
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val bodyHeight = maxHeight // read here: inside the nested Column the scope marker blocks it
             if (state is ConnState.Ready) {
                 KeyboardCapture(c, keyboardRequest)
                 if (landscape) {
@@ -104,7 +105,7 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
                     ) {
                         Controls(c, volume, onKeyboard = { keyboardRequest++ })
                         Spacer(Modifier.height(8.dp))
-                        Trackpad(c, { speed }, { natural }, Modifier.fillMaxWidth(), padHeight = touchpadHeightDp(maxHeight.value).dp)
+                        Trackpad(c, { speed }, { natural }, Modifier.fillMaxWidth(), padHeight = touchpadHeightDp(bodyHeight.value).dp)
                     }
                 }
             } else {
