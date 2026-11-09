@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.artem.easyremote.Proto
 import com.artem.easyremote.RemoteController
+import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -47,6 +48,9 @@ private const val DOUBLE_TAP_MS = 280L
 
 /** PC pixels per dp of finger travel at speed 1.0 (before acceleration). */
 private const val PC_PX_PER_DP = 3f
+
+/** Time constant of the finger-speed smoothing (ms): long enough to hide event-timing jitter. */
+private const val SPEED_TAU_MS = 30f
 
 /** Hi-res wheel units per dp of two-finger travel (120 units = one wheel notch). */
 private const val WHEEL_UNITS_PER_DP = 10f
@@ -147,6 +151,7 @@ private suspend fun PointerInputScope.trackpadGestures(
         var scrollRemY = 0f
         var buttonHeld = false
         var lastTime = t0
+        var speedDpMs = 0f // smoothed finger speed
 
         if (dragMode) {
             c.button(Proto.BTN_LEFT, Proto.ACT_PRESS)
@@ -188,8 +193,12 @@ private suspend fun PointerInputScope.trackpadGestures(
                     val dtMs = max(1L, ch.uptimeMillis - ch.previousUptimeMillis).toFloat()
                     val dxDp = delta.x / density
                     val dyDp = delta.y / density
-                    val v = hypot(dxDp, dyDp) / dtMs // dp per ms
-                    val gain = PC_PX_PER_DP * speed() * (1f + min(v / 0.6f, 1.5f))
+                    // Acceleration follows a smoothed speed. The raw per-event speed (distance / the
+                    // time since the previous event) is noisy, because events arrive in uneven
+                    // intervals, and used directly it made the gain, and so the cursor, jump.
+                    val alpha = 1f - exp(-dtMs / SPEED_TAU_MS)
+                    speedDpMs += alpha * (hypot(dxDp, dyDp) / dtMs - speedDpMs)
+                    val gain = PC_PX_PER_DP * speed() * (1f + min(speedDpMs / 0.6f, 1.5f))
                     remX += dxDp * gain
                     remY += dyDp * gain
                     val ix = remX.toInt()
@@ -202,6 +211,7 @@ private suspend fun PointerInputScope.trackpadGestures(
             event.changes.forEach { if (it.positionChanged()) it.consume() }
         }
 
+        c.flushPointer() // finger up: send what is pending now, the cursor stops with the finger
         val duration = lastTime - t0
         when {
             buttonHeld -> c.button(Proto.BTN_LEFT, Proto.ACT_RELEASE)

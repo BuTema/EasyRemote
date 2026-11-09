@@ -166,8 +166,11 @@ class RemoteController(
         session?.sendBinary(bytes)
     }
 
-    // Pointer movement and scrolling are coalesced to at most one frame per 8 ms (125 Hz). This
-    // keeps traffic and radio wake-ups low while staying smooth.
+    // Pointer movement and scrolling are coalesced, never dropped: the pending deltas are summed, so
+    // the total displacement is exact. A frame goes out immediately whenever the link is idle (no
+    // added latency) and at most every MIN_FRAME_MS (250 per second). While the network is behind
+    // (bytes still queued in the socket) new movement keeps adding up in the pending sum instead of
+    // piling up as stale frames, so the cursor never keeps running after the finger has stopped.
     private var pendingDx = 0
     private var pendingDy = 0
     private var moveScheduled = false
@@ -177,9 +180,12 @@ class RemoteController(
     private var scrollScheduled = false
     private var lastScrollSent = 0L
 
-    private val moveFlush = Runnable { flushMove() }
-    private val scrollFlush = Runnable { flushScroll() }
+    private val moveFlush = Runnable { moveScheduled = false; pumpMove() }
+    private val scrollFlush = Runnable { scrollScheduled = false; pumpScroll() }
 
+    private fun linkBusy(): Boolean = (session?.queuedBytes() ?: 0L) > BACKLOG_BYTES
+
+    /** Sends the pending movement now, unconditionally. */
     private fun flushMove() {
         moveScheduled = false
         handler.removeCallbacks(moveFlush)
@@ -202,6 +208,29 @@ class RemoteController(
         }
     }
 
+    /** Sends if the rate limit and the link allow it, otherwise tries again shortly. */
+    private fun pumpMove() {
+        if (pendingDx == 0 && pendingDy == 0) return
+        val wait = lastMoveSent + MIN_FRAME_MS - SystemClock.uptimeMillis()
+        if (wait <= 0 && !linkBusy()) {
+            flushMove()
+        } else if (!moveScheduled) {
+            moveScheduled = true
+            handler.postDelayed(moveFlush, if (wait > 0) wait else MIN_FRAME_MS)
+        }
+    }
+
+    private fun pumpScroll() {
+        if (pendingSx == 0 && pendingSy == 0) return
+        val wait = lastScrollSent + MIN_FRAME_MS - SystemClock.uptimeMillis()
+        if (wait <= 0 && !linkBusy()) {
+            flushScroll()
+        } else if (!scrollScheduled) {
+            scrollScheduled = true
+            handler.postDelayed(scrollFlush, if (wait > 0) wait else MIN_FRAME_MS)
+        }
+    }
+
     private fun resetPending() {
         handler.removeCallbacks(moveFlush)
         handler.removeCallbacks(scrollFlush)
@@ -218,14 +247,7 @@ class RemoteController(
         if (session == null) return
         pendingDx += dx
         pendingDy += dy
-        if (moveScheduled) return
-        val wait = lastMoveSent + FRAME_MS - SystemClock.uptimeMillis()
-        if (wait <= 0) {
-            flushMove()
-        } else {
-            moveScheduled = true
-            handler.postDelayed(moveFlush, wait)
-        }
+        pumpMove()
     }
 
     /** Hi-res wheel units (120 = one notch); +dy up, +dx right. */
@@ -233,14 +255,13 @@ class RemoteController(
         if (session == null) return
         pendingSx += dx
         pendingSy += dy
-        if (scrollScheduled) return
-        val wait = lastScrollSent + FRAME_MS - SystemClock.uptimeMillis()
-        if (wait <= 0) {
-            flushScroll()
-        } else {
-            scrollScheduled = true
-            handler.postDelayed(scrollFlush, wait)
-        }
+        pumpScroll()
+    }
+
+    /** The finger was lifted: send whatever is still pending right away so the cursor stops promptly. */
+    fun flushPointer() {
+        flushMove()
+        flushScroll()
     }
 
     // Everything below first flushes pending movement so the order of events is preserved.
@@ -276,7 +297,8 @@ class RemoteController(
     }
 
     companion object {
-        private const val FRAME_MS = 8L
+        private const val MIN_FRAME_MS = 4L
+        private const val BACKLOG_BYTES = 256L
         private const val MAX_FAILURES = 5
     }
 }

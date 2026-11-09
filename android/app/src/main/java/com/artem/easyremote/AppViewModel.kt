@@ -40,6 +40,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val pair: StateFlow<PairUi> = _pair
 
     private val http = OkHttpClient.Builder()
+        .socketFactory(NoDelaySocketFactory())
         .connectTimeout(3, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS) // WebSocket: no read timeout, liveness is checked with pings
         .pingInterval(15, TimeUnit.SECONDS)

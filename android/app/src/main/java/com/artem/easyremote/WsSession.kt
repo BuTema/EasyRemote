@@ -184,6 +184,9 @@ class WsSession(private val base: OkHttpClient) {
 
     fun sendBinary(bytes: ByteArray): Boolean = ws?.send(bytes.toByteString()) ?: false
 
+    /** Bytes accepted by [sendBinary] but not yet written to the network (0 = the link keeps up). */
+    fun queuedBytes(): Long = ws?.queueSize() ?: 0L
+
     fun close() {
         closedByUs.set(true)
         ws?.close(1000, null)
