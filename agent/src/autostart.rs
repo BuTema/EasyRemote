@@ -18,28 +18,72 @@ fn daemon_path() -> Result<PathBuf, String> {
 }
 
 #[cfg(windows)]
+const RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+
+/// `reg.exe` without a console window flashing up (the tray calls this from a GUI process).
+#[cfg(windows)]
+fn reg() -> Command {
+    use std::os::windows::process::CommandExt;
+    let mut c = Command::new("reg");
+    c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    c
+}
+
+/// Is the start-at-login entry present?
+#[cfg(windows)]
+pub fn login_entry_exists() -> bool {
+    reg().args(["query", RUN_KEY, "/v", "EasyRemote"]).output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+/// Adds or removes the start-at-login entry only; a running agent is left alone.
+#[cfg(windows)]
+pub fn set_login_entry(on: bool) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    if on {
+        let daemon = daemon_path()?;
+        // raw_arg: reg.exe does not use the usual C-runtime quote escaping, so the value must be passed
+        // exactly as `"C:\path\easyremoted.exe"` (a plain quoted path).
+        let out = reg()
+            .args(["add", RUN_KEY, "/v", "EasyRemote", "/t", "REG_SZ", "/d"])
+            .raw_arg(format!("\"{}\"", daemon.display()))
+            .arg("/f")
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err("could not write the Run registry key".into());
+        }
+    } else {
+        let _ = reg().args(["delete", RUN_KEY, "/v", "EasyRemote", "/f"]).output();
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
 pub fn enable() -> Result<String, String> {
     let daemon = daemon_path()?;
+    set_login_entry(true)?;
+    // Start it right now. An agent that is already running is stopped first, so that after an upgrade
+    // the new version really runs (otherwise the new one would exit at once because the port is taken).
     use std::os::windows::process::CommandExt;
-    // raw_arg: reg.exe does not use the usual C-runtime quote escaping, so the value must be passed
-    // exactly as `"C:\path\easyremoted.exe"` (a plain quoted path).
-    let status = Command::new("reg")
-        .args(["add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", "EasyRemote", "/t", "REG_SZ", "/d"])
-        .raw_arg(format!("\"{}\"", daemon.display()))
-        .arg("/f")
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !status.status.success() {
-        return Err("could not write the Run registry key".into());
-    }
-    Ok("EasyRemote will start automatically when you sign in to Windows.".into())
+    let _ = Command::new("taskkill").args(["/IM", "easyremoted.exe", "/F"]).creation_flags(0x0800_0000).output();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let started = Command::new(&daemon)
+        .creation_flags(0x0000_0008 | 0x0800_0000) // DETACHED_PROCESS | CREATE_NO_WINDOW
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .is_ok();
+    Ok(if started {
+        "EasyRemote is running now (look for its icon in the tray) and will start every time you sign in to Windows.".to_string()
+    } else {
+        "EasyRemote will start automatically when you sign in to Windows (could not start it now).".to_string()
+    })
 }
 
 #[cfg(windows)]
 pub fn disable() -> Result<String, String> {
-    let _ = Command::new("reg")
-        .args(["delete", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", "EasyRemote", "/f"])
-        .output();
+    let _ = set_login_entry(false);
     let _ = Command::new("taskkill").args(["/IM", "easyremoted.exe", "/F"]).output();
     Ok("Autostart removed and the agent stopped.".into())
 }

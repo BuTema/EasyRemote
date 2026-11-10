@@ -25,6 +25,24 @@ const STATE_POLL: Duration = Duration::from_secs(2);
 const MAX_CONNECTIONS: usize = 8;
 const MAX_FRAME: usize = 4096;
 
+/// Number of phones that are connected and authenticated right now (shown by the Windows tray icon).
+pub static CONNECTED: AtomicUsize = AtomicUsize::new(0);
+
+struct ConnGuard;
+
+impl ConnGuard {
+    fn new() -> Self {
+        CONNECTED.fetch_add(1, Ordering::Relaxed);
+        ConnGuard
+    }
+}
+
+impl Drop for ConnGuard {
+    fn drop(&mut self) {
+        CONNECTED.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 pub struct Shared {
     pub dir: PathBuf,
     pub name: String,
@@ -216,6 +234,7 @@ async fn handle(tcp: TcpStream, acceptor: TlsAcceptor, shared: &Shared) -> Resul
     }
 
     tx.send(Message::text(format!(r#"{{"t":"ready","build":"{}"}}"#, crate::build_id()))).await.map_err(|e| e.to_string())?;
+    let _conn = ConnGuard::new();
 
     // state updates (volume) are produced on the input thread and forwarded here
     let (state_tx, mut state_rx) = unbounded_channel::<String>();

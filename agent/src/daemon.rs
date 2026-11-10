@@ -8,8 +8,27 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-/// Run the agent until it receives Ctrl-C / SIGTERM.
+/// Asks a running [`run_agent`] to stop (used by the Windows tray's Quit).
+pub static SHUTDOWN: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
+pub fn request_shutdown() {
+    SHUTDOWN.notify_one();
+}
+
+/// Run the agent until it receives Ctrl-C / SIGTERM. On Windows it also shows the tray icon.
 pub fn run(mock: bool, stderr_log: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        crate::tray::run(mock, stderr_log)
+    }
+    #[cfg(not(windows))]
+    {
+        run_agent(mock, stderr_log)
+    }
+}
+
+/// The agent itself: network, input, discovery. Runs until Ctrl-C / SIGTERM / [`request_shutdown`].
+pub fn run_agent(mock: bool, stderr_log: bool) -> Result<(), String> {
     let dir = config::dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
     crate::log::init(&dir, stderr_log);
@@ -72,6 +91,13 @@ pub fn run(mock: bool, stderr_log: bool) -> Result<(), String> {
 }
 
 async fn shutdown_signal() {
+    tokio::select! {
+        _ = os_signal() => {}
+        _ = SHUTDOWN.notified() => {}
+    }
+}
+
+async fn os_signal() {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{signal, SignalKind};

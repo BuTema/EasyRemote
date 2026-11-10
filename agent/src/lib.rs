@@ -15,6 +15,8 @@ pub mod pairing;
 pub mod proto;
 pub mod selfupdate;
 pub mod server;
+#[cfg(windows)]
+pub mod tray;
 
 /// Which build this is: the short git commit CI built it from, or "dev" for a local build.
 pub fn build_id() -> &'static str {

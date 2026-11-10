@@ -98,6 +98,11 @@ pub fn start(dir: &Path) -> io::Result<String> {
     Ok(secret)
 }
 
+/// Close the pairing window now (e.g. the user closed the QR window).
+pub fn cancel(dir: &Path) {
+    let _ = fs::remove_file(path(dir));
+}
+
 pub fn is_open(dir: &Path) -> bool {
     load(dir).is_some()
 }

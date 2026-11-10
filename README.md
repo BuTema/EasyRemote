@@ -49,6 +49,8 @@ Tip: `alias easyremote='flatpak run io.github.butema.EasyRemote'` makes the comm
 * **Control panel** (directly above the touchpad, the whole group sits at the bottom of the screen for one-handed use): on the left `Esc` · arrows (hold to repeat) · `Enter`; on the right, top row **Play/Pause**, **Fullscreen** (sends the letter **F**, which most video players use; not F11) and the **keyboard** button (opens your phone's normal keyboard in any language), bottom row **volume −**, **mute** and **volume +** (one step = 5 %). Mute turns red while the PC is muted, and either volume button unmutes. The current volume is a bar under the volume buttons, and the connection status sits under the arrow keys; changes made on the PC itself show up on the phone within a couple of seconds.
 * The phone's own volume buttons also control the PC volume while connected (can be turned off in Settings).
 
+**Windows tray icon:** `easyremoted.exe` shows a small icon next to the clock (blue = running, green = a phone is connected). Click it for the menu: status, **Pair a phone…** (a window with the QR code), **Paired phones** (revoke one or all), **Start with Windows**, open the log / settings folder, **Quit**. After an upgrade run `easyremote autostart on` once: it restarts the agent so the new version runs.
+
 **Updating the agent:** install the new package or Flatpak over the old one, then run `easyremote autostart on`: it stops the old agent and starts the new one (an agent that finds itself replaced on disk also restarts itself the next time a phone connects). `easyremote status` shows the build you have.
 
 ## Agent commands
