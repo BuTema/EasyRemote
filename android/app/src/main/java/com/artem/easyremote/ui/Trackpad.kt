@@ -1,5 +1,6 @@
 package com.artem.easyremote.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,7 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -37,7 +46,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.artem.easyremote.Proto
@@ -98,16 +106,18 @@ fun Trackpad(
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().height(56.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ClickButton("Left click", "Left", Proto.BTN_LEFT, c, Modifier.weight(1f).fillMaxHeight())
-            // same size as the click buttons, between them
-            PadButton("Open keyboard", Modifier.weight(1f).fillMaxHeight(), icon = Icons.Default.Keyboard) { onKeyboard() }
-            ClickButton("Right click", "Right", Proto.BTN_RIGHT, c, Modifier.weight(1f).fillMaxHeight())
+            ClickButton("Left click", false, Proto.BTN_LEFT, c, Modifier.weight(1f).fillMaxHeight())
+            // a small button between the two click buttons
+            Box(Modifier.width(64.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                PadButton("Open keyboard", Modifier.fillMaxWidth().height(44.dp), icon = Icons.Default.Keyboard) { onKeyboard() }
+            }
+            ClickButton("Right click", true, Proto.BTN_RIGHT, c, Modifier.weight(1f).fillMaxHeight())
         }
     }
 }
 
 @Composable
-private fun ClickButton(description: String, label: String, button: Int, c: RemoteController, modifier: Modifier) {
+private fun ClickButton(description: String, right: Boolean, button: Int, c: RemoteController, modifier: Modifier) {
     val view = LocalView.current
     var pressed by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
@@ -129,11 +139,28 @@ private fun ClickButton(description: String, label: String, button: Int, c: Remo
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            color = if (pressed) scheme.onPrimary else scheme.onSecondaryContainer,
-            fontWeight = FontWeight.SemiBold,
-        )
+        MouseButtonIcon(right, if (pressed) scheme.onPrimary else scheme.onSecondaryContainer)
+    }
+}
+
+/** A mouse seen from above with the left or the right button filled in, so it shows which one it clicks. */
+@Composable
+private fun MouseButtonIcon(right: Boolean, tint: Color) {
+    Canvas(Modifier.size(width = 26.dp, height = 34.dp)) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.dp.toPx()
+        val body = Path().apply {
+            addRoundRect(RoundRect(stroke / 2, stroke / 2, w - stroke / 2, h - stroke / 2, CornerRadius(w / 2.2f)))
+        }
+        val split = h * 0.42f
+        clipPath(body) {
+            // the pressed button: the top half on the chosen side
+            drawRect(tint, topLeft = Offset(if (right) w / 2 else 0f, 0f), size = Size(w / 2, split))
+        }
+        drawPath(body, tint, style = Stroke(width = stroke))
+        drawLine(tint, Offset(stroke / 2, split), Offset(w - stroke / 2, split), strokeWidth = stroke)
+        drawLine(tint, Offset(w / 2, 0f), Offset(w / 2, split), strokeWidth = stroke)
     }
 }
 
