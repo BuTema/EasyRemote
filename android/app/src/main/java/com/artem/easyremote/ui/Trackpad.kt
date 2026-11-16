@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +72,7 @@ fun Trackpad(
     speed: () -> Float,
     natural: () -> Boolean,
     straight: () -> Boolean = { true },
+    onKeyboard: () -> Unit = {},
     modifier: Modifier = Modifier,
     /** fixed pad height (portrait, where the pad hugs the bottom); null = take all remaining height */
     padHeight: Dp? = null,
@@ -96,6 +99,8 @@ fun Trackpad(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().height(56.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ClickButton("Left click", "Left", Proto.BTN_LEFT, c, Modifier.weight(1f).fillMaxHeight())
+            // same size as the click buttons, between them
+            PadButton("Open keyboard", Modifier.weight(1f).fillMaxHeight(), icon = Icons.Default.Keyboard) { onKeyboard() }
             ClickButton("Right click", "Right", Proto.BTN_RIGHT, c, Modifier.weight(1f).fillMaxHeight())
         }
     }

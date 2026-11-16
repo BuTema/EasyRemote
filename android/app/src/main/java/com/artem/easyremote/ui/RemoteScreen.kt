@@ -116,11 +116,11 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
                 if (landscape) {
                     Row(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Controls(
-                            c, volume, onKeyboard = { keyboardRequest++ }, stacked = true,
+                            c, volume, stacked = true,
                             status = { ConnStatus(state, stacked = false) },
                             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                         )
-                        Trackpad(c, { speed }, { natural }, { straight }, Modifier.weight(1f).fillMaxHeight())
+                        Trackpad(c, { speed }, { natural }, { straight }, { keyboardRequest++ }, Modifier.weight(1f).fillMaxHeight())
                     }
                 } else {
                     // Flexible empty space on top; controls, touchpad and the click buttons form one
@@ -129,10 +129,10 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
                         Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
                         verticalArrangement = Arrangement.Bottom,
                     ) {
-                        Controls(c, volume, onKeyboard = { keyboardRequest++ }, status = { ConnStatus(state, stacked = false) })
+                        Controls(c, volume, status = { ConnStatus(state, stacked = false) })
                         Spacer(Modifier.height(8.dp))
                         Trackpad(
-                            c, { speed }, { natural }, { straight }, Modifier.fillMaxWidth(),
+                            c, { speed }, { natural }, { straight }, { keyboardRequest++ }, Modifier.fillMaxWidth(),
                             padHeight = touchpadHeightDp(bodyHeight.value).dp,
                         )
                     }

@@ -18,13 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.KeyboardReturn
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.VolumeOff
@@ -147,33 +144,33 @@ private val ROW_GAP = 3.dp
 private val GROUP_GAP = 24.dp
 
 /**
- * The control panel: navigation on the left, media on the right, both as two aligned rows.
+ * The control panel: two groups side by side, each with two aligned rows of two buttons.
  *
- *   Esc   Up    Enter  |  Play/Pause  Fullscreen  Keyboard
- *   Left  Down  Right  |  Vol -       Mute        Vol +
- *                         (volume %, under the media group)
+ *   Esc (exit fullscreen)  F (fullscreen)   |  Mute          Play/Pause
+ *   Rewind (Left key)      Forward (Right)  |  Volume -      Volume +
+ *   (connection status)                        (volume bar)
  *
+ * The keyboard button sits between Left and Right click, under the touchpad.
  * Narrow panes (landscape) stack the two groups instead of putting them side by side.
  */
 @Composable
 fun Controls(
     c: RemoteController,
     volume: VolumeInfo?,
-    onKeyboard: () -> Unit,
     modifier: Modifier = Modifier,
     stacked: Boolean = false,
-    /** shown under the arrow keys, level with the volume bar under the media buttons */
+    /** shown under the left group, level with the volume bar under the right group */
     status: (@Composable () -> Unit)? = null,
 ) {
     if (stacked) {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
             NavGroup(c, Modifier.fillMaxWidth(), status)
-            MediaGroup(c, volume, onKeyboard, Modifier.fillMaxWidth())
+            MediaGroup(c, volume, Modifier.fillMaxWidth())
         }
     } else {
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
             NavGroup(c, Modifier.weight(1f), status)
-            MediaGroup(c, volume, onKeyboard, Modifier.weight(1f))
+            MediaGroup(c, volume, Modifier.weight(1f))
         }
     }
 }
@@ -189,25 +186,34 @@ private fun RowScope.Cell(content: (@Composable (Modifier) -> Unit)?) {
 private fun NavGroup(c: RemoteController, modifier: Modifier, status: (@Composable () -> Unit)?) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
-            Cell { PadButton("Escape", it, label = "Esc") { c.key(Proto.KEY_ESC) } }
-            Cell { PadButton("Up", it, icon = Icons.Default.KeyboardArrowUp, repeat = true) { c.key(Proto.KEY_UP) } }
-            Cell { PadButton("Enter", it, icon = Icons.Default.KeyboardReturn) { c.key(Proto.KEY_ENTER) } }
+            Cell { PadButton("Escape, exit fullscreen", it, icon = Icons.Default.FullscreenExit) { c.key(Proto.KEY_ESC) } }
+            // sends the ordinary letter F (not F11): most players use F for fullscreen
+            Cell { PadButton("Fullscreen, sends F", it, icon = Icons.Default.Fullscreen) { c.key(Proto.KEY_F) } }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
-            Cell { PadButton("Left", it, icon = Icons.Default.KeyboardArrowLeft, repeat = true) { c.key(Proto.KEY_LEFT) } }
-            Cell { PadButton("Down", it, icon = Icons.Default.KeyboardArrowDown, repeat = true) { c.key(Proto.KEY_DOWN) } }
-            Cell { PadButton("Right", it, icon = Icons.Default.KeyboardArrowRight, repeat = true) { c.key(Proto.KEY_RIGHT) } }
+            Cell { PadButton("Left arrow, rewind", it, icon = Icons.Default.FastRewind, repeat = true) { c.key(Proto.KEY_LEFT) } }
+            Cell { PadButton("Right arrow, fast forward", it, icon = Icons.Default.FastForward, repeat = true) { c.key(Proto.KEY_RIGHT) } }
         }
-        // connection status, level with the volume bar under the media group
+        // connection status, level with the volume bar under the right group
         Box(Modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.Center) { status?.invoke() }
     }
 }
 
 @Composable
-private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () -> Unit, modifier: Modifier) {
+private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modifier) {
     val muted = volume?.muted == true
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+            Cell {
+                // the state shown here is the one the PC reported, not a guess made on the phone
+                // always the muted-speaker icon; only the colour tells the state (red = muted)
+                PadButton(
+                    description = if (muted) "Unmute" else "Mute",
+                    modifier = it,
+                    icon = Icons.Default.VolumeOff,
+                    danger = muted,
+                ) { if (volume == null) c.toggleMute() else c.setMute(!muted) }
+            }
             Cell {
                 PadButton("Play or pause", it, content = { fg ->
                     // play / pause: both symbols with a slash between them, in the one button
@@ -218,25 +224,12 @@ private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, onKeyboard: () 
                     }
                 }) { c.media(Proto.MEDIA_PLAY_PAUSE) }
             }
-            // sends the ordinary letter F (not F11): most players use F for fullscreen
-            Cell { PadButton("Fullscreen, sends F", it, icon = Icons.Default.Fullscreen) { c.key(Proto.KEY_F) } }
-            Cell { PadButton("Open keyboard", it, icon = Icons.Default.Keyboard) { onKeyboard() } }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
             Cell {
                 PadButton("Volume down", it, icon = Icons.Default.VolumeDown, repeat = true, repeatMs = 160) {
                     c.volumeSteps(-1)
                 }
-            }
-            Cell {
-                // the state shown here is the one the PC reported, not a guess made on the phone
-                // always the muted-speaker icon; only the colour tells the state (red = muted)
-                PadButton(
-                    description = if (muted) "Unmute" else "Mute",
-                    modifier = it,
-                    icon = Icons.Default.VolumeOff,
-                    danger = muted,
-                ) { if (volume == null) c.toggleMute() else c.setMute(!muted) }
             }
             Cell {
                 PadButton("Volume up", it, icon = Icons.Default.VolumeUp, repeat = true, repeatMs = 160) {
