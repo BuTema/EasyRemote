@@ -146,9 +146,9 @@ private val GROUP_GAP = 24.dp
 /**
  * The control panel: two groups side by side, each with two aligned rows of two buttons.
  *
- *   Esc (exit fullscreen)  F (fullscreen)   |  Rewind (Left)   Forward (Right)
- *   Mute                   Play/Pause       |  Volume -        Volume +
- *   (connection status)                        (volume bar)
+ *   (connection status)                        |  (volume bar)
+ *   Esc (exit fullscreen)  F (fullscreen)   |  Volume -        Volume +
+ *   Mute                   Play/Pause       |  Rewind (Left)   Forward (Right)
  *
  * The keyboard button sits between Left and Right click, under the touchpad.
  * Narrow panes (landscape) stack the two groups instead of putting them side by side.
@@ -186,6 +186,8 @@ private fun RowScope.Cell(content: (@Composable (Modifier) -> Unit)?) {
 private fun LeftGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modifier, status: (@Composable () -> Unit)?) {
     val muted = volume?.muted == true
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
+        // connection status above the buttons, level with the volume bar above the right group
+        Box(Modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.Center) { status?.invoke() }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
             Cell { PadButton("Escape, exit fullscreen", it, icon = Icons.Default.FullscreenExit) { c.key(Proto.KEY_ESC) } }
             // sends the ordinary letter F (not F11): most players use F for fullscreen
@@ -213,18 +215,14 @@ private fun LeftGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modifi
                 }) { c.media(Proto.MEDIA_PLAY_PAUSE) }
             }
         }
-        // connection status, level with the volume bar under the right group
-        Box(Modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.Center) { status?.invoke() }
     }
 }
 
 @Composable
 private fun RightGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
-            Cell { PadButton("Left arrow, rewind", it, icon = Icons.Default.FastRewind, repeat = true) { c.key(Proto.KEY_LEFT) } }
-            Cell { PadButton("Right arrow, fast forward", it, icon = Icons.Default.FastForward, repeat = true) { c.key(Proto.KEY_RIGHT) } }
-        }
+        // the PC's volume as a bar above the volume buttons (red while muted)
+        VolumeBar(volume)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
             Cell {
                 PadButton("Volume down", it, icon = Icons.Default.VolumeDown, repeat = true, repeatMs = 160) {
@@ -237,8 +235,10 @@ private fun RightGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modif
                 }
             }
         }
-        // the PC's volume as a bar under the volume buttons (red while muted)
-        VolumeBar(volume)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+            Cell { PadButton("Left arrow, rewind", it, icon = Icons.Default.FastRewind, repeat = true) { c.key(Proto.KEY_LEFT) } }
+            Cell { PadButton("Right arrow, fast forward", it, icon = Icons.Default.FastForward, repeat = true) { c.key(Proto.KEY_RIGHT) } }
+        }
     }
 }
 
