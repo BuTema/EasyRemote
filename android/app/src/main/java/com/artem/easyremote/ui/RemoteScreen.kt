@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -45,7 +46,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -105,14 +108,15 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        // While connected the status sits under the arrow keys; the connecting screen has its own spinner,
-        // so the top bar only shows the status after a failure.
-        TopBar(pc.name, state, showStatus = state is ConnState.Failed, onBack = { vm.back() })
+        TopBar(pc.name, onBack = { vm.back() })
         if (ready && agentBuild == null) OutdatedAgentNotice()
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val bodyHeight = maxHeight // read here: inside the nested Column the scope marker blocks it
-            if (state is ConnState.Ready) {
-                KeyboardCapture(c, keyboardRequest)
+            if (ready) KeyboardCapture(c, keyboardRequest)
+
+            // The control layout is always shown, so it is clear what the screen will look like; until
+            // the PC is connected it is dimmed and does not react to touches.
+            Box(Modifier.fillMaxSize().alpha(if (ready) 1f else 0.38f)) {
                 if (landscape) {
                     Row(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Controls(
@@ -137,8 +141,21 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
                         )
                     }
                 }
-            } else {
-                ConnectionPanel(pc, state, onRetry = { vm.openRemote(pc) }, onForget = { vm.forget(pc) })
+            }
+            if (!ready) {
+                // swallows every touch, so the dimmed buttons below cannot be pressed
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) awaitPointerEvent().changes.forEach { it.consume() }
+                            }
+                        },
+                )
+                Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                    ConnectionPanel(pc, state, onRetry = { vm.openRemote(pc) }, onForget = { vm.forget(pc) })
+                }
             }
         }
     }
@@ -158,17 +175,13 @@ private fun lowLatencyWifiLock(context: Context): WifiManager.WifiLock? = try {
 }
 
 @Composable
-private fun TopBar(name: String, state: ConnState, showStatus: Boolean, onBack: () -> Unit) {
+private fun TopBar(name: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
         }
         Column(Modifier.weight(1f)) {
             Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        }
-        if (showStatus) {
-            ConnStatus(state, stacked = false)
-            Spacer(Modifier.width(12.dp))
         }
     }
 }
@@ -216,7 +229,11 @@ private fun OutdatedAgentNotice() {
 @Composable
 private fun ConnectionPanel(pc: Pc, state: ConnState, onRetry: () -> Unit, onForget: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().padding(32.dp).verticalScroll(rememberScrollState()),
+        Modifier
+            .widthIn(max = 360.dp)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f), RoundedCornerShape(24.dp))
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

@@ -80,6 +80,8 @@ jobs:
     env:
       # the commit this build is made from: the app compares it with the latest release to find updates
       EASYREMOTE_BUILD: ${{ github.sha }}
+      # every CI run gets the next number: version 0.1.<number> and the Play versionCode, in every APK
+      EASYREMOTE_VERSION_CODE: ${{ github.run_number }}
     defaults:
       run:
         working-directory: android
