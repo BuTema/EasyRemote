@@ -87,4 +87,6 @@ dependencies {
     "playImplementation"("com.android.billingclient:billing:8.3.0")
 
     testImplementation("junit:junit:4.13.2")
+    // the android.jar used by unit tests only has stubs of org.json; this is the real implementation
+    testImplementation("org.json:json:20240303")
 }
