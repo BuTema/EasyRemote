@@ -77,6 +77,9 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
+    env:
+      # the commit this build is made from: the app compares it with the latest release to find updates
+      EASYREMOTE_BUILD: ${{ github.sha }}
     defaults:
       run:
         working-directory: android

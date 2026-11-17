@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,7 +51,7 @@ fun SettingsScreen(vm: AppViewModel) {
         },
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column {
@@ -60,12 +62,13 @@ fun SettingsScreen(vm: AppViewModel) {
             SwitchRow("Natural scrolling", "Two fingers up moves the page up, like on a phone", natural) { s.setNaturalScroll(it) }
             SwitchRow("Phone volume buttons control the PC", "While a PC is connected", volKeys) { s.setVolumeKeys(it) }
             SwitchRow("Keep screen on", "Uses more battery; the connection pauses when the screen is off", awake) { s.setKeepScreenOn(it) }
+            AboutSection(vm)
         }
     }
 }
 
 @Composable
-private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)

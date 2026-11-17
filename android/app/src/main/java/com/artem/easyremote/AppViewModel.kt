@@ -38,6 +38,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val settings = SettingsStore(app)
     val discovery = Discovery(app)
     val paywall: Paywall = createPaywall(app)
+    val updater: Updater = createUpdater(app, viewModelScope, settings)
 
     private val _pcs = MutableStateFlow(store.all())
     val pcs: StateFlow<List<Pc>> = _pcs
@@ -145,6 +146,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Activity came to the foreground. */
     fun onForeground() {
+        updater.checkIfDue()
         discovery.start()
         startProbing()
         if (_screen.value is Screen.Add) paywall.refresh() // e.g. back from the purchase sheet

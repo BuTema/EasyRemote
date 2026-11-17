@@ -14,7 +14,9 @@ android {
         targetSdk = 36
         // Play needs a higher versionCode for every upload; CI passes the run number.
         versionCode = (System.getenv("EASYREMOTE_VERSION_CODE") ?: "1").toInt()
-        versionName = "0.1.0"
+        // 0.1.<CI run number>; the commit it was built from is what the update check compares
+        versionName = "0.1." + (System.getenv("EASYREMOTE_VERSION_CODE") ?: "0")
+        buildConfigField("String", "BUILD_SHA", "\"" + (System.getenv("EASYREMOTE_BUILD") ?: "dev") + "\"")
     }
 
     // Release signing: when the four EASYREMOTE_* variables are set (CI reads them from GitHub
@@ -58,6 +60,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"

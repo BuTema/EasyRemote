@@ -59,14 +59,17 @@ fun PcListScreen(vm: AppViewModel) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("EasyRemote") },
-                actions = {
-                    IconButton(onClick = { vm.showSettings() }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-            )
+            Column {
+                TopAppBar(
+                    title = { Text("EasyRemote") },
+                    actions = {
+                        IconButton(onClick = { vm.showSettings() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    },
+                )
+                UpdateBanner(vm)
+            }
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { vm.showAdd() }) {

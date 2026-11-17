@@ -146,8 +146,8 @@ private val GROUP_GAP = 24.dp
 /**
  * The control panel: two groups side by side, each with two aligned rows of two buttons.
  *
- *   Esc (exit fullscreen)  F (fullscreen)   |  Mute          Play/Pause
- *   Rewind (Left key)      Forward (Right)  |  Volume -      Volume +
+ *   Esc (exit fullscreen)  F (fullscreen)   |  Rewind (Left)   Forward (Right)
+ *   Mute                   Play/Pause       |  Volume -        Volume +
  *   (connection status)                        (volume bar)
  *
  * The keyboard button sits between Left and Right click, under the touchpad.
@@ -164,13 +164,13 @@ fun Controls(
 ) {
     if (stacked) {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
-            NavGroup(c, Modifier.fillMaxWidth(), status)
-            MediaGroup(c, volume, Modifier.fillMaxWidth())
+            LeftGroup(c, volume, Modifier.fillMaxWidth(), status)
+            RightGroup(c, volume, Modifier.fillMaxWidth())
         }
     } else {
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(GROUP_GAP)) {
-            NavGroup(c, Modifier.weight(1f), status)
-            MediaGroup(c, volume, Modifier.weight(1f))
+            LeftGroup(c, volume, Modifier.weight(1f), status)
+            RightGroup(c, volume, Modifier.weight(1f))
         }
     }
 }
@@ -183,7 +183,8 @@ private fun RowScope.Cell(content: (@Composable (Modifier) -> Unit)?) {
 }
 
 @Composable
-private fun NavGroup(c: RemoteController, modifier: Modifier, status: (@Composable () -> Unit)?) {
+private fun LeftGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modifier, status: (@Composable () -> Unit)?) {
+    val muted = volume?.muted == true
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
             Cell { PadButton("Escape, exit fullscreen", it, icon = Icons.Default.FullscreenExit) { c.key(Proto.KEY_ESC) } }
@@ -191,19 +192,6 @@ private fun NavGroup(c: RemoteController, modifier: Modifier, status: (@Composab
             Cell { PadButton("Fullscreen, sends F", it, icon = Icons.Default.Fullscreen) { c.key(Proto.KEY_F) } }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NAV_GAP)) {
-            Cell { PadButton("Left arrow, rewind", it, icon = Icons.Default.FastRewind, repeat = true) { c.key(Proto.KEY_LEFT) } }
-            Cell { PadButton("Right arrow, fast forward", it, icon = Icons.Default.FastForward, repeat = true) { c.key(Proto.KEY_RIGHT) } }
-        }
-        // connection status, level with the volume bar under the right group
-        Box(Modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.Center) { status?.invoke() }
-    }
-}
-
-@Composable
-private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modifier) {
-    val muted = volume?.muted == true
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
             Cell {
                 // the state shown here is the one the PC reported, not a guess made on the phone
                 // always the muted-speaker icon; only the colour tells the state (red = muted)
@@ -224,6 +212,18 @@ private fun MediaGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modif
                     }
                 }) { c.media(Proto.MEDIA_PLAY_PAUSE) }
             }
+        }
+        // connection status, level with the volume bar under the right group
+        Box(Modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.Center) { status?.invoke() }
+    }
+}
+
+@Composable
+private fun RightGroup(c: RemoteController, volume: VolumeInfo?, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+            Cell { PadButton("Left arrow, rewind", it, icon = Icons.Default.FastRewind, repeat = true) { c.key(Proto.KEY_LEFT) } }
+            Cell { PadButton("Right arrow, fast forward", it, icon = Icons.Default.FastForward, repeat = true) { c.key(Proto.KEY_RIGHT) } }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
             Cell {

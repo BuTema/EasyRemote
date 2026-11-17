@@ -85,6 +85,25 @@ class SettingsStore(context: Context) {
     val volumeKeys = MutableStateFlow(prefs.getBoolean("volkeys", true))
     val keepScreenOn = MutableStateFlow(prefs.getBoolean("awake", false))
     val straightAssist = MutableStateFlow(prefs.getBoolean("straight", true))
+    val autoUpdateCheck = MutableStateFlow(prefs.getBoolean("autoupdate", true))
+    /** commit id of the update whose banner the user closed */
+    val dismissedUpdate = MutableStateFlow(prefs.getString("upddismissed", "") ?: "")
+
+    fun setAutoUpdateCheck(v: Boolean) {
+        autoUpdateCheck.value = v
+        prefs.edit().putBoolean("autoupdate", v).apply()
+    }
+
+    fun lastUpdateCheck(): Long = prefs.getLong("updchecked", 0L)
+
+    fun setLastUpdateCheck(ms: Long) {
+        prefs.edit().putLong("updchecked", ms).apply()
+    }
+
+    fun dismissUpdate(sha: String) {
+        dismissedUpdate.value = sha
+        prefs.edit().putString("upddismissed", sha).apply()
+    }
 
     fun setNaturalScroll(v: Boolean) {
         naturalScroll.value = v
