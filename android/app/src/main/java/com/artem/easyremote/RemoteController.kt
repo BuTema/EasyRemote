@@ -45,6 +45,9 @@ class RemoteController(
     /** Build id the PC agent reported when connecting; null = an agent too old to report one. */
     val agentBuild: StateFlow<String?> = _agentBuild
 
+    /** Connected, or busy connecting / reconnecting: the connection is in use and should not be restarted. */
+    fun isActive(): Boolean = _state.value.let { it is ConnState.Ready || it is ConnState.Connecting }
+
     private var job: Job? = null
 
     @Volatile

@@ -1,9 +1,13 @@
 package com.artem.easyremote.ui
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.wifi.WifiManager
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -55,6 +60,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.artem.easyremote.AppViewModel
 import com.artem.easyremote.ConnState
 import com.artem.easyremote.FailKind
@@ -82,14 +88,29 @@ fun RemoteScreen(vm: AppViewModel, pc: Pc) {
     // While the remote is open keep Wi-Fi out of power-save mode: otherwise the radio sleeps between
     // bursts and delivers the cursor movement in lumps, which shows as jumpy motion.
     val appContext = LocalContext.current.applicationContext
+    val foreground by vm.inForeground.collectAsState()
     val ready = state is ConnState.Ready
-    DisposableEffect(ready) {
-        val lock = if (ready) lowLatencyWifiLock(appContext) else null
+    // only while the screen is on and in front: with the player running the connection outlives the screen
+    val active = ready && foreground
+    DisposableEffect(active) {
+        val lock = if (active) lowLatencyWifiLock(appContext) else null
         // and take touch samples as they happen instead of once per screen refresh
-        TouchMode.unbuffered = ready
+        TouchMode.unbuffered = active
         onDispose {
             TouchMode.unbuffered = false
             runCatching { lock?.release() }
+        }
+    }
+
+    // Android 13+: the player in the notification shade needs the notification permission; ask once.
+    val playerOn by vm.settings.playerNotification.collectAsState()
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(ready, playerOn) {
+        if (ready && playerOn && Build.VERSION.SDK_INT >= 33 && !vm.settings.notificationPermissionAsked &&
+            ContextCompat.checkSelfPermission(appContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            vm.settings.notificationPermissionAsked = true
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 

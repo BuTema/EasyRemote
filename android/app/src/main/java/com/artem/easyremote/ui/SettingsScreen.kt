@@ -37,6 +37,7 @@ fun SettingsScreen(vm: AppViewModel) {
     val volKeys by s.volumeKeys.collectAsState()
     val awake by s.keepScreenOn.collectAsState()
     val straight by s.straightAssist.collectAsState()
+    val player by s.playerNotification.collectAsState()
 
     Scaffold(
         topBar = {
@@ -62,6 +63,11 @@ fun SettingsScreen(vm: AppViewModel) {
             SwitchRow("Natural scrolling", "Two fingers up moves the page up, like on a phone", natural) { s.setNaturalScroll(it) }
             SwitchRow("Phone volume buttons control the PC", "While a PC is connected", volKeys) { s.setVolumeKeys(it) }
             SwitchRow("Keep screen on", "Uses more battery; the connection pauses when the screen is off", awake) { s.setKeepScreenOn(it) }
+            SwitchRow(
+                "Player in notifications",
+                "Rewind, pause and volume in the notification and on the lock screen while connected. Keeps the connection while the app is in the background.",
+                player,
+            ) { s.setPlayerNotification(it) }
             AboutSection(vm)
         }
     }

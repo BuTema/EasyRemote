@@ -11,6 +11,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -58,6 +59,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         .build()
 
     val controller = RemoteController(viewModelScope, http, store, discovery) { _pcs.value = store.all() }
+
+    // ------------------------------------------------------------------ player notification
+
+    private val _inForeground = MutableStateFlow(true)
+
+    /** The activity is on screen. */
+    val inForeground: StateFlow<Boolean> = _inForeground
+
+    private var playerRunning = false
+
+    init {
+        RemoteHub.controller = controller
+        RemoteHub.settings = settings
+        RemoteHub.disconnect = { back() }
+        // The player runs while a PC is connected and the remote screen is the open one.
+        viewModelScope.launch {
+            combine(controller.state, _screen, settings.playerNotification, _inForeground) { st, screen, enabled, fg ->
+                val wanted = enabled && screen is Screen.Remote && (st is ConnState.Ready || (playerRunning && st is ConnState.Connecting))
+                if (wanted && !playerRunning && fg) {
+                    playerRunning = PlayerService.start(app)
+                } else if (!wanted && playerRunning) {
+                    playerRunning = false
+                    PlayerService.stop(app)
+                }
+            }.collect {}
+        }
+    }
 
     // ------------------------------------------------------------------ reachability
 
@@ -113,6 +141,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------ navigation
 
     fun openRemote(pc: Pc) {
+        RemoteHub.pcName = pc.name
         _screen.value = Screen.Remote(pc.fingerprint)
         controller.start(pc)
     }
@@ -146,21 +175,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Activity came to the foreground. */
     fun onForeground() {
+        _inForeground.value = true
         updater.checkIfDue()
         discovery.start()
         startProbing()
         if (_screen.value is Screen.Add) paywall.refresh() // e.g. back from the purchase sheet
         val s = _screen.value
         if (s is Screen.Remote) {
-            store.all().firstOrNull { it.fingerprint == s.fingerprint }?.let { controller.start(it) }
+            // with the player running the connection was kept: do not restart it
+            if (!controller.isActive()) {
+                store.all().firstOrNull { it.fingerprint == s.fingerprint }?.let { controller.start(it) }
+            }
         }
     }
 
     /** Activity left the foreground: stop everything that uses the radio. */
     fun onBackground() {
+        _inForeground.value = false
         discovery.stop()
         stopProbing()
-        controller.stop()
+        // the player keeps the connection alive while it is running; otherwise close it to save battery
+        if (!playerRunning) controller.stop()
     }
 
     /** Phone volume buttons control the PC while a remote screen is connected. */

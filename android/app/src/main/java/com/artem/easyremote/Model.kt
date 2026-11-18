@@ -85,9 +85,23 @@ class SettingsStore(context: Context) {
     val volumeKeys = MutableStateFlow(prefs.getBoolean("volkeys", true))
     val keepScreenOn = MutableStateFlow(prefs.getBoolean("awake", false))
     val straightAssist = MutableStateFlow(prefs.getBoolean("straight", true))
+    /** media-style player in the notification shade while connected (keeps the connection in the background) */
+    val playerNotification = MutableStateFlow(prefs.getBoolean("player", true))
     val autoUpdateCheck = MutableStateFlow(prefs.getBoolean("autoupdate", true))
     /** commit id of the update whose banner the user closed */
     val dismissedUpdate = MutableStateFlow(prefs.getString("upddismissed", "") ?: "")
+
+    fun setPlayerNotification(v: Boolean) {
+        playerNotification.value = v
+        prefs.edit().putBoolean("player", v).apply()
+    }
+
+    /** Asked for the notification permission already (Android 13+): do not ask again on every connect. */
+    var notificationPermissionAsked: Boolean
+        get() = prefs.getBoolean("notifasked", false)
+        set(v) {
+            prefs.edit().putBoolean("notifasked", v).apply()
+        }
 
     fun setAutoUpdateCheck(v: Boolean) {
         autoUpdateCheck.value = v
