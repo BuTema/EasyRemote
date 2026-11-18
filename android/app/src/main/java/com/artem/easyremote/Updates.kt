@@ -8,6 +8,9 @@ object AppVersion {
     val name: String get() = BuildConfig.VERSION_NAME
     val sha: String get() = BuildConfig.BUILD_SHA
 
+    /** the CI run number: grows with every build */
+    val code: Int get() = BuildConfig.VERSION_CODE
+
     /** `dev` for a local build that did not come from CI */
     val isDevBuild: Boolean get() = sha == "dev"
     val shortSha: String get() = if (isDevBuild) "dev" else sha.take(7)
@@ -16,6 +19,8 @@ object AppVersion {
 /** A newer build that can be downloaded. */
 data class UpdateInfo(
     val sha: String,
+    /** the CI run number of that build (its version code), when the release notes say it */
+    val number: Int?,
     val title: String,
     val publishedAt: String,
     val apkUrl: String,
@@ -43,7 +48,17 @@ interface Updater {
 
     /** Checks only if automatic checks are on and the last check is old enough. */
     fun checkIfDue()
+
+    /** Downloads the new APK inside the app and opens the system installer for it. */
+    fun install(info: UpdateInfo)
 }
+
+/** The version name of a build with this number, as shown in Settings (`0.1.<number>`). */
+fun versionNameFor(number: Int): String = "0.1.$number"
+
+/** Newer means a higher build number; without a number in the notes the commits are compared. */
+fun isNewer(info: UpdateInfo, localCode: Int, localSha: String): Boolean =
+    if (info.number != null) info.number > localCode else !sameBuild(localSha, info.sha)
 
 /** Same build? Compares the commit ids; either side may be abbreviated. */
 fun sameBuild(local: String, remote: String): Boolean {
@@ -69,5 +84,6 @@ fun parseLatestRelease(json: String, debuggable: Boolean): UpdateInfo? {
         }
     }
     val page = o.optString("html_url")
-    return UpdateInfo(sha, "", o.optString("published_at"), apk.ifBlank { page }, page)
+    val number = Regex("run (\\d+)").find(o.optString("body"))?.groupValues?.get(1)?.toIntOrNull()
+    return UpdateInfo(sha, number, "", o.optString("published_at"), apk.ifBlank { page }, page)
 }

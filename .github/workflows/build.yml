@@ -229,6 +229,8 @@ jobs:
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: dist/*
           body: |
+            Automatic build of ${{ github.sha }} (run ${{ github.run_number }}).
+
             **Phone:** install `EasyRemote.apk` (or `EasyRemote-debug.apk`).
             **Linux (any distro, incl. Linux Mint):** install `easyremote.flatpak` — see the README. Alternative for Mint / Ubuntu / Debian: `sudo apt install ./easyremote_*_amd64.deb`.
             **Windows:** unzip `easyremote-windows-x86_64.zip` and run `install.ps1`.

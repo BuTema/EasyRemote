@@ -13,6 +13,7 @@ class UpdatesTest {
     private val release = """
         {"tag_name":"latest","target_commitish":"$sha","published_at":"2026-11-16T21:40:27Z",
          "html_url":"https://github.com/BuTema/EasyRemote/releases/tag/latest",
+         "body":"Automatic build of $sha (run 27).\n\n**Phone:** install it",
          "assets":[
            {"name":"EasyRemote-debug.apk","browser_download_url":"https://example/debug.apk"},
            {"name":"easyremote.flatpak","browser_download_url":"https://example/f.flatpak"},
@@ -46,5 +47,21 @@ class UpdatesTest {
         assertFalse(sameBuild("0000000", sha))
         assertFalse(sameBuild("", sha))
         assertFalse(sameBuild(sha, ""))
+    }
+
+    @Test fun runNumberIsReadFromTheNotes() {
+        assertEquals(27, parseLatestRelease(release, false)!!.number)
+        assertNull(parseLatestRelease("""{"target_commitish":"$sha","assets":[]}""", false)!!.number)
+    }
+
+    @Test fun newerMeansAHigherBuildNumber() {
+        val info = parseLatestRelease(release, false)!!
+        assertTrue(isNewer(info, 26, "0000000"))
+        assertFalse(isNewer(info, 27, "0000000")) // same number: not newer, whatever the commit says
+        assertFalse(isNewer(info, 30, "0000000")) // this build is ahead of the release
+        // no number in the notes: different commit counts as an update
+        val noNumber = info.copy(number = null)
+        assertTrue(isNewer(noNumber, 1, "0000000"))
+        assertFalse(isNewer(noNumber, 1, sha.take(7)))
     }
 }

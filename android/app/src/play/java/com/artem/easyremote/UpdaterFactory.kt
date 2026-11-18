@@ -11,6 +11,7 @@ private object PlayUpdater : Updater {
     override val state: StateFlow<UpdateState> = MutableStateFlow(UpdateState.Idle)
     override fun check() {}
     override fun checkIfDue() {}
+    override fun install(info: UpdateInfo) {}
 }
 
 @Suppress("UNUSED_PARAMETER")
