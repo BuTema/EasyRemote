@@ -95,3 +95,5 @@ base64 -w0 easyremote.jks      # copy the output
 
 Then in the GitHub repo: Settings → Secrets and variables → Actions → New repository secret:
 `EASYREMOTE_KEYSTORE_B64` (the base64 text), `EASYREMOTE_KEYSTORE_PASSWORD`, `EASYREMOTE_KEY_ALIAS` (`easyremote`), `EASYREMOTE_KEY_PASSWORD`. The next build signs `EasyRemote.apk` with it. Never commit the `.jks` file. `EasyRemote-debug.apk` always uses the debug key.
+
+* **Player card.** While connected, the app behaves like a music player for the system: a media session with a cover, previous/play-pause/next (Left arrow, play/pause, Right arrow) and custom buttons (volume −/+ and mute, or mute and disconnect when the phone's volume keys control the PC). It appears in the notification shade, on the lock screen and in the quick-settings media area. To be recognised as a real player, it plays an inaudible looping sound (no audio focus, so your music is never interrupted); that is why the foreground service also declares the media-playback type.

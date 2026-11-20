@@ -6,7 +6,14 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.media.AudioAttributes
@@ -14,6 +21,7 @@ import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -49,6 +57,9 @@ class PlayerService : Service() {
     private var session: MediaSession? = null
     private var volumeProvider: VolumeProvider? = null
     private var remoteVolume = false
+    private val silence = SilentAudio()
+    private var art: Bitmap? = null
+    private var screenReceiver: BroadcastReceiver? = null
 
     private var lastNotification: Notification? = null
 
@@ -83,20 +94,21 @@ class PlayerService : Service() {
                 override fun onSkipToPrevious() { RemoteHub.controller?.key(Proto.KEY_LEFT) }
                 override fun onFastForward() { RemoteHub.controller?.key(Proto.KEY_RIGHT) }
                 override fun onRewind() { RemoteHub.controller?.key(Proto.KEY_LEFT) }
+                override fun onCustomAction(action: String, extras: Bundle?) { handleAction(action) }
             })
-            setPlaybackState(
-                PlaybackState.Builder()
-                    .setActions(
-                        PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
-                            PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or
-                            PlaybackState.ACTION_FAST_FORWARD or PlaybackState.ACTION_REWIND,
-                    )
-                    // "playing": it makes the system treat this session as the active one, so the volume keys reach it
-                    .setState(PlaybackState.STATE_PLAYING, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
-                    .build(),
+            setSessionActivity(
+                PendingIntent.getActivity(
+                    this@PlayerService,
+                    0,
+                    Intent(this@PlayerService, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                ),
             )
+            setPlaybackState(playbackState(settings?.volumeKeys?.value ?: true, false))
             isActive = true
         }
+        silence.start()
+        registerScreenReceiver()
         // a foreground service must show its notification within seconds of being started
         startForegroundCompat(buildNotification(RemoteHub.pcName, ConnState.Connecting(1), null, settings?.volumeKeys?.value ?: true))
 
@@ -112,10 +124,16 @@ class PlayerService : Service() {
                         return@collect
                     }
                     applyVolumeRouting(keys, vol)
+                    val status = statusText(st, vol)
+                    session?.setPlaybackState(playbackState(keys, vol?.muted == true))
                     session?.setMetadata(
                         MediaMetadata.Builder()
-                            .putString(MediaMetadata.METADATA_KEY_TITLE, RemoteHub.pcName)
-                            .putString(MediaMetadata.METADATA_KEY_ARTIST, statusText(st, vol))
+                            .putString(MediaMetadata.METADATA_KEY_TITLE, RemoteHub.pcName.ifBlank { "EasyRemote" })
+                            .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, RemoteHub.pcName.ifBlank { "EasyRemote" })
+                            .putString(MediaMetadata.METADATA_KEY_ARTIST, status)
+                            .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE, status)
+                            .putString(MediaMetadata.METADATA_KEY_ALBUM, "EasyRemote")
+                            .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artwork())
                             .build(),
                     )
                     getSystemService(NotificationManager::class.java).notify(ID, buildNotification(RemoteHub.pcName, st, vol, keys))
@@ -154,22 +172,88 @@ class PlayerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.action?.let { handleAction(it) }
+        return START_NOT_STICKY
+    }
+
+    private fun handleAction(action: String) {
         val c = RemoteHub.controller
-        when (intent?.action) {
+        when (action) {
             ACTION_REWIND -> c?.key(Proto.KEY_LEFT)
             ACTION_FORWARD -> c?.key(Proto.KEY_RIGHT)
             ACTION_PLAY_PAUSE -> c?.media(Proto.MEDIA_PLAY_PAUSE)
             ACTION_VOLUME_DOWN -> c?.volumeSteps(-1)
             ACTION_VOLUME_UP -> c?.volumeSteps(1)
+            ACTION_MUTE -> c?.toggleMute()
             ACTION_DISCONNECT -> RemoteHub.disconnect?.invoke()
-            // the notification was swiped away (Android 14+ allows that for ongoing ones): put it back
-            ACTION_REPOST -> lastNotification?.let { startForegroundCompat(it) }
+            // the notification was swiped away (some systems allow that for ongoing ones): put it back
+            ACTION_REPOST -> repost()
         }
-        return START_NOT_STICKY
+    }
+
+    /** What the system's player card (lock screen, shade) offers: previous / play / next plus custom buttons. */
+    private fun playbackState(phoneVolumeKeys: Boolean, muted: Boolean): PlaybackState {
+        val b = PlaybackState.Builder()
+            .setActions(
+                PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
+                    PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or
+                    PlaybackState.ACTION_FAST_FORWARD or PlaybackState.ACTION_REWIND,
+            )
+            // "playing": the system treats this as the active player (lock-screen card, volume keys, no swipe-away)
+            .setState(PlaybackState.STATE_PLAYING, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
+        if (phoneVolumeKeys) {
+            b.addCustomAction(ACTION_MUTE, if (muted) "Unmute" else "Mute", R.drawable.ic_np_mute)
+            b.addCustomAction(ACTION_DISCONNECT, "Disconnect", R.drawable.ic_np_close)
+        } else {
+            b.addCustomAction(ACTION_VOLUME_DOWN, "Volume down", R.drawable.ic_np_volume_down)
+            b.addCustomAction(ACTION_VOLUME_UP, "Volume up", R.drawable.ic_np_volume_up)
+            b.addCustomAction(ACTION_MUTE, if (muted) "Unmute" else "Mute", R.drawable.ic_np_mute)
+        }
+        return b.build()
+    }
+
+    /** The "album cover": the app glyph on a rounded tile. Drawn once. */
+    private fun artwork(): Bitmap {
+        art?.let { return it }
+        val size = 256
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(0x1F, 0x4E, 0x79) }
+        canvas.drawRoundRect(RectF(0f, 0f, size.toFloat(), size.toFloat()), 48f, 48f, paint)
+        ContextCompat.getDrawable(this, R.drawable.ic_stat_remote)?.let {
+            val pad = size / 5
+            it.setBounds(pad, pad, size - pad, size - pad)
+            it.draw(canvas)
+        }
+        art = bmp
+        return bmp
+    }
+
+    /** Puts the notification back if it is gone; checked whenever the screen turns on or off. */
+    private fun repost() {
+        val n = lastNotification ?: return
+        val nm = getSystemService(NotificationManager::class.java)
+        if (nm.activeNotifications.none { it.id == ID }) startForegroundCompat(n)
+    }
+
+    private fun registerScreenReceiver() {
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) { repost() }
+        }
+        val f = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        ContextCompat.registerReceiver(this, r, f, ContextCompat.RECEIVER_NOT_EXPORTED)
+        screenReceiver = r
     }
 
     override fun onDestroy() {
         scope.cancel()
+        silence.stop()
+        screenReceiver?.let { unregisterReceiver(it) }
+        screenReceiver = null
         session?.run {
             isActive = false
             release()
@@ -189,7 +273,7 @@ class PlayerService : Service() {
 
     private fun startForegroundCompat(n: Notification) {
         if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else {
             startForeground(ID, n)
         }
@@ -217,6 +301,7 @@ class PlayerService : Service() {
             .setContentTitle(name.ifBlank { "EasyRemote" })
             .setContentText(statusText(st, vol))
             .setContentIntent(open)
+            .setLargeIcon(artwork())
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
@@ -262,6 +347,7 @@ class PlayerService : Service() {
         const val ACTION_PLAY_PAUSE = "com.artem.easyremote.PLAY_PAUSE"
         const val ACTION_VOLUME_DOWN = "com.artem.easyremote.VOLUME_DOWN"
         const val ACTION_VOLUME_UP = "com.artem.easyremote.VOLUME_UP"
+        const val ACTION_MUTE = "com.artem.easyremote.MUTE"
         const val ACTION_DISCONNECT = "com.artem.easyremote.DISCONNECT"
         const val ACTION_REPOST = "com.artem.easyremote.REPOST"
 
