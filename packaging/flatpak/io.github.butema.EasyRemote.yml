@@ -11,6 +11,8 @@ finish-args:
   - --share=network
   # /dev/uinput: the virtual mouse + keyboard
   - --device=all
+  # X11 connection used to type text of any language independent of the keyboard layout
+  - --socket=x11
   # Volume (pactl) and clipboard (xclip/xsel/wl-copy) are run on the host through
   # `flatpak-spawn --host`; only those fixed commands are ever executed.
   - --talk-name=org.freedesktop.Flatpak

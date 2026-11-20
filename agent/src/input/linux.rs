@@ -1,6 +1,7 @@
 //! Linux backend: a virtual keyboard+mouse through /dev/uinput (works on X11 and Wayland alike),
 //! volume through `pactl` (PulseAudio / PipeWire) or `wpctl`, with media-key fallback.
 
+use super::x11text::X11Typer;
 use super::{InputBackend, VolumeState};
 use crate::hostenv::{flatpak_id, host_command, in_flatpak};
 use crate::proto::{Button, Key, Media};
@@ -14,9 +15,41 @@ pub struct LinuxInput {
     dev: VirtualDevice,
     wheel_v: i32,
     wheel_h: i32,
+    x11: X11Typer,
 }
 
 impl LinuxInput {
+    /// Type through X11 and fall back for whatever it could not type.
+    fn type_chunk(&mut self, s: &str) {
+        if s.is_empty() {
+            return;
+        }
+        let done = self.x11.type_str(s);
+        if let Some((byte, _)) = s.char_indices().nth(done) {
+            self.text_fallback(&s[byte..]);
+        }
+    }
+
+    /// The layout-dependent path: ASCII on US-layout keys, everything else through the clipboard.
+    fn text_fallback(&mut self, s: &str) {
+        let mut pending = String::new();
+        for c in s.chars() {
+            match ascii_key(c) {
+                Some((code, shift)) => {
+                    if !pending.is_empty() {
+                        let p = std::mem::take(&mut pending);
+                        self.paste(&p);
+                    }
+                    self.tap(code, shift);
+                }
+                None => pending.push(c),
+            }
+        }
+        if !pending.is_empty() {
+            self.paste(&pending);
+        }
+    }
+
     pub fn new() -> Result<Self, String> {
         let mut keys = AttributeSet::<KeyCode>::new();
         for c in 1u16..=248 {
@@ -55,7 +88,7 @@ impl LinuxInput {
             .map_err(|e| format!("{hint}: {e}"))?;
         // Give the compositor a moment to notice the new device before the first event.
         sleep(Duration::from_millis(300));
-        Ok(LinuxInput { dev, wheel_v: 0, wheel_h: 0 })
+        Ok(LinuxInput { dev, wheel_v: 0, wheel_h: 0, x11: X11Typer::new() })
     }
 
     fn emit(&mut self, events: &[InputEvent]) {
@@ -388,22 +421,20 @@ impl InputBackend for LinuxInput {
     }
 
     fn text(&mut self, s: &str) {
-        let mut pending = String::new();
+        // Preferred: real Unicode keysyms through X11, independent of the PC's keyboard layout.
+        // Enter and Tab keep using their physical keys; anything X could not type falls back to
+        // the older path below (US-layout keys for ASCII, clipboard paste for the rest).
+        let mut chunk = String::new();
         for c in s.chars() {
-            match ascii_key(c) {
-                Some((code, shift)) => {
-                    if !pending.is_empty() {
-                        let p = std::mem::take(&mut pending);
-                        self.paste(&p);
-                    }
-                    self.tap(code, shift);
+            match c {
+                '\n' | '\r' | '\t' => {
+                    self.type_chunk(&std::mem::take(&mut chunk));
+                    self.text_fallback(&c.to_string());
                 }
-                None => pending.push(c),
+                _ => chunk.push(c),
             }
         }
-        if !pending.is_empty() {
-            self.paste(&pending);
-        }
+        self.type_chunk(&chunk);
     }
 
     fn media(&mut self, m: Media) {

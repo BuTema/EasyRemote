@@ -50,15 +50,21 @@ class PlayerService : Service() {
     private var volumeProvider: VolumeProvider? = null
     private var remoteVolume = false
 
+    private var lastNotification: Notification? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         val nm = getSystemService(NotificationManager::class.java)
+        // the first version of the channel did not show on the lock screen; channel settings cannot be
+        // changed after creation, so it was replaced by a new one
+        nm.deleteNotificationChannel(OLD_CHANNEL)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, "Remote player", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Controls for the connected PC"
                 setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             },
         )
         val hub = RemoteHub
@@ -151,6 +157,8 @@ class PlayerService : Service() {
             ACTION_VOLUME_DOWN -> c?.volumeSteps(-1)
             ACTION_VOLUME_UP -> c?.volumeSteps(1)
             ACTION_DISCONNECT -> RemoteHub.disconnect?.invoke()
+            // the notification was swiped away (Android 14+ allows that for ongoing ones): put it back
+            ACTION_REPOST -> lastNotification?.let { getSystemService(NotificationManager::class.java).notify(ID, it) }
         }
         return START_NOT_STICKY
     }
@@ -222,11 +230,24 @@ class PlayerService : Service() {
         session?.sessionToken?.let { style.setMediaSession(it) }
         b.setStyle(style)
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
-        return b.build()
+        b.setCategory(Notification.CATEGORY_TRANSPORT)
+        b.setDeleteIntent(
+            PendingIntent.getService(
+                this,
+                ACTION_REPOST.hashCode(),
+                Intent(this, PlayerService::class.java).setAction(ACTION_REPOST),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ),
+        )
+        val n = b.build()
+        n.flags = n.flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT
+        lastNotification = n
+        return n
     }
 
     companion object {
-        private const val CHANNEL = "player"
+        private const val CHANNEL = "player_v2"
+        private const val OLD_CHANNEL = "player"
         private const val ID = 7
         private const val MAX_STEPS = 20
         private const val STEP = 5
@@ -237,6 +258,7 @@ class PlayerService : Service() {
         const val ACTION_VOLUME_DOWN = "com.artem.easyremote.VOLUME_DOWN"
         const val ACTION_VOLUME_UP = "com.artem.easyremote.VOLUME_UP"
         const val ACTION_DISCONNECT = "com.artem.easyremote.DISCONNECT"
+        const val ACTION_REPOST = "com.artem.easyremote.REPOST"
 
         /** Starts (or refreshes) the player. Only from the foreground, and only if notifications are allowed. */
         fun start(context: Context): Boolean {

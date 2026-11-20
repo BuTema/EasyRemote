@@ -35,7 +35,7 @@ flatpak run io.github.butema.EasyRemote pair                    # shows the QR c
 
 Tip: `alias easyremote='flatpak run io.github.butema.EasyRemote'` makes the commands below shorter. To stop the agent: `flatpak kill io.github.butema.EasyRemote`.
 
-*Why the permissions:* the Flatpak asks for network (phone connection), `/dev/uinput` (the virtual input device), permission to write the login-autostart entry, and to run a few fixed host commands (`pactl` for volume; `xclip`/`xsel`/`wl-copy` for typing non-English text) through `flatpak-spawn --host`. A Flatpak cannot install the udev rule that gives your user access to `/dev/uinput`, which is what the one-time `host-setup` step does.
+*Why the permissions:* the Flatpak asks for network (phone connection), `/dev/uinput` (the virtual input device), permission to write the login-autostart entry, and to run a few fixed host commands (`pactl` for volume; `xclip`/`xsel`/`wl-copy` for the Wayland typing fallback), and the X11 socket for typing through `flatpak-spawn --host`. A Flatpak cannot install the udev rule that gives your user access to `/dev/uinput`, which is what the one-time `host-setup` step does.
 
 *Alternative for Mint / Ubuntu / Debian without Flatpak:* `sudo apt install ./easyremote_0.1.0_amd64.deb`, then `easyremote autostart on` and `easyremote pair` (the package does the host setup itself). The binary is built against glibc 2.35, so it runs on Mint 21.x and 22.x. Other distributions: use the `.tar.gz` and `./install.sh`.
 
@@ -79,7 +79,7 @@ cd android && ./gradlew testDirectDebugUnitTest assembleDirectDebug    # JDK 17,
 
 * The agent's protocol, pairing and security logic is covered by automated tests (unit + end-to-end over real TLS/WebSocket, run on Linux).
 * **Not yet run on real hardware:** Windows input injection and volume (Core Audio), Linux `/dev/uinput` injection (including on Mint), the Flatpak itself, and the whole Android app. They were written against the platform APIs and are compiled by CI, but the first real-device run may need small fixes. The shared protocol/pairing vectors are asserted on both the Rust and the Kotlin side.
-* Linux typing of non-ASCII characters (e.g. Ukrainian) pastes through the clipboard (Ctrl+V), so `xclip` or `xsel` (X11; Mint ships `xsel`) or `wl-clipboard` (Wayland) must be installed, and terminal windows, which paste with Ctrl+Shift+V, will not receive such characters. Plain English letters and digits are typed as real key presses everywhere. Windows types every character directly.
+* Linux typing on X11 (Mint/Cinnamon, most desktops) sends real Unicode characters through the XTEST extension, so any language works and the layout active on the PC does not matter. On a pure Wayland session this is not available; the agent then falls back to US-layout key presses for ASCII and clipboard paste (Ctrl+V; needs `wl-clipboard`) for the rest, and the PC's layout matters. Windows types every character directly.
 * The QR scanner uses Google Play services' code scanner; without Play services use the manual entry.
 * The release APK is signed with your own key when the `EASYREMOTE_KEYSTORE_B64`, `EASYREMOTE_KEYSTORE_PASSWORD`, `EASYREMOTE_KEY_ALIAS` and `EASYREMOTE_KEY_PASSWORD` repository secrets exist (see README "Signing"); otherwise with the debug key.
 * Only IPv4 addresses are used. Guest Wi-Fi or "client isolation" networks block phone-to-PC traffic by design.

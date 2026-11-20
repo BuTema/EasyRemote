@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+mod x11text;
 #[cfg(windows)]
 mod windows;
 

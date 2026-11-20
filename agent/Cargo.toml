@@ -44,6 +44,7 @@ strip = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.13.2"
+x11rb = { version = "0.13", default-features = false, features = ["xtest"] }
 
 [target."cfg(windows)".dependencies]
 windows = { version = "0.62.2", default-features = false, features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_Media", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Security"] }
