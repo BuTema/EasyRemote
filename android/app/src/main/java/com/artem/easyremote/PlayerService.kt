@@ -59,11 +59,16 @@ class PlayerService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         // the first version of the channel did not show on the lock screen; channel settings cannot be
         // changed after creation, so it was replaced by a new one
-        nm.deleteNotificationChannel(OLD_CHANNEL)
+        for (old in OLD_CHANNELS) nm.deleteNotificationChannel(old)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Remote player", NotificationManager.IMPORTANCE_LOW).apply {
+            // IMPORTANCE_DEFAULT but silent: "low" notifications count as silent and many systems
+            // (OriginOS, One UI) hide those on the lock screen, "default" ones are shown
+            NotificationChannel(CHANNEL, "Remote player", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Controls for the connected PC"
                 setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+                enableLights(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             },
         )
@@ -158,7 +163,7 @@ class PlayerService : Service() {
             ACTION_VOLUME_UP -> c?.volumeSteps(1)
             ACTION_DISCONNECT -> RemoteHub.disconnect?.invoke()
             // the notification was swiped away (Android 14+ allows that for ongoing ones): put it back
-            ACTION_REPOST -> lastNotification?.let { getSystemService(NotificationManager::class.java).notify(ID, it) }
+            ACTION_REPOST -> lastNotification?.let { startForegroundCompat(it) }
         }
         return START_NOT_STICKY
     }
@@ -246,8 +251,8 @@ class PlayerService : Service() {
     }
 
     companion object {
-        private const val CHANNEL = "player_v2"
-        private const val OLD_CHANNEL = "player"
+        private const val CHANNEL = "player_v3"
+        private val OLD_CHANNELS = listOf("player", "player_v2")
         private const val ID = 7
         private const val MAX_STEPS = 20
         private const val STEP = 5
