@@ -1,7 +1,7 @@
 //! Linux backend: a virtual keyboard+mouse through /dev/uinput (works on X11 and Wayland alike),
 //! volume through `pactl` (PulseAudio / PipeWire) or `wpctl`, with media-key fallback.
 
-use super::x11text::X11Typer;
+use super::x11text::{X11Typer, KS_BACKSPACE, KS_RETURN, KS_TAB};
 use super::{InputBackend, VolumeState};
 use crate::hostenv::{flatpak_id, host_command, in_flatpak};
 use crate::proto::{Button, Key, Media};
@@ -417,6 +417,19 @@ impl InputBackend for LinuxInput {
     }
 
     fn key(&mut self, k: Key, down: bool) {
+        // Backspace / Enter / Tab typically come from the phone's keyboard right after text that went through
+        // X11; sending them the same way keeps them in order with it (a different route could overtake it).
+        let sym = match k {
+            Key::Backspace => Some(KS_BACKSPACE),
+            Key::Enter => Some(KS_RETURN),
+            Key::Tab => Some(KS_TAB),
+            _ => None,
+        };
+        if let Some(sym) = sym {
+            if (down || self.x11.holds(sym)) && self.x11.key(sym, down) {
+                return;
+            }
+        }
         self.emit(&[Self::key_ev(key_code(k), down)]);
     }
 
