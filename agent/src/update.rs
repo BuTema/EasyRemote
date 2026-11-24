@@ -1,4 +1,4 @@
-//! `easyremote update`: downloads the newest build from the GitHub "Latest build" release and installs it.
+//! `easyremote update`: checks the GitHub "Latest build" release; with `--apply` it downloads and installs the newest build.
 //!
 //! Downloads go through `curl` (on every supported system: Linux, Windows 10+; inside a Flatpak it runs on the
 //! host), so the agent itself carries no HTTP client. What "install" means depends on how EasyRemote was
@@ -213,9 +213,9 @@ fn restart_agent(exe: &Path) -> Result<(), String> {
     run_checked(Command::new(exe).args(["autostart", "on"]), "restarting the agent")
 }
 
-/// `easyremote update [--check] [--force]`
+/// `easyremote update [--apply] [--force]`: without `--apply` it only reports.
 pub fn run(args: &[String]) -> Result<(), String> {
-    let check_only = args.iter().any(|a| a == "--check");
+    let apply = args.iter().any(|a| a == "--apply");
     let force = args.iter().any(|a| a == "--force");
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let kind = Kind::detect(&exe);
@@ -235,8 +235,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         return Ok(());
     }
     println!("Newest build: {latest}.");
-    if check_only {
-        println!("Run `easyremote update` to install it.");
+    if !apply {
+        println!("Run `easyremote update --apply` to install it.");
         return Ok(());
     }
     let asset = pick_asset(&release, kind).ok_or("this release has no file for this system")?;

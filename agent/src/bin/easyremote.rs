@@ -13,7 +13,7 @@ USAGE:
   easyremote autostart on|off     Start the agent automatically at login
   easyremote host-setup           Print the one-time computer setup script (use:  easyremote host-setup | sudo sh)
   easyremote run                  Run the agent in this terminal (same as easyremoted -f)
-  easyremote update [--check]     Download and install the newest build from GitHub, then restart the agent
+  easyremote update [--apply]     Check for a newer build; with --apply download, install it and restart the agent
   easyremote type-test [text]     Type a test text into the window that has focus after 4 seconds (troubleshooting keyboard input)
   easyremote audio-debug          Print what the audio system reports (for troubleshooting volume / mute)
 ";

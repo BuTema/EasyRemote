@@ -51,7 +51,7 @@ Tip: `alias easyremote='flatpak run io.github.butema.EasyRemote'` makes the comm
 
 **Windows tray icon:** `easyremoted.exe` shows a small icon next to the clock (blue = running, green = a phone is connected). Click it for the menu: status, **Pair a phone…** (a window with the QR code), **Paired phones** (revoke one or all), **Start with Windows**, open the log / settings folder, **Quit**. After an upgrade run `easyremote autostart on` once: it restarts the agent so the new version runs.
 
-**Updating the agent:** run `easyremote update` (Flatpak: `flatpak run io.github.butema.EasyRemote update`). It looks at the *Latest build* release on GitHub, downloads the file that matches how you installed (Flatpak bundle, `.deb` via `dpkg` which asks for your password, or the portable tar.gz / Windows zip, whose two programs are replaced in place), checks the download against the checksum GitHub publishes, and restarts the agent. `easyremote update --check` only tells you whether a newer build exists. It needs `curl` (present on Linux Mint and Windows 10+). By hand it is: install the new package or Flatpak over the old one, then run `easyremote autostart on` (an agent that finds itself replaced on disk also restarts itself the next time a phone connects). `easyremote status` shows the build you have.
+**Updating the agent:** run `easyremote update` to see whether a newer build exists, then `easyremote update --apply` to install it (Flatpak: `flatpak run io.github.butema.EasyRemote update --apply`). It looks at the *Latest build* release on GitHub, downloads the file that matches how you installed (Flatpak bundle, `.deb` via `dpkg` which asks for your password, or the portable tar.gz / Windows zip, whose two programs are replaced in place), checks the download against the checksum GitHub publishes, and restarts the agent. It needs `curl` (present on Linux Mint and Windows 10+). By hand it is: install the new package or Flatpak over the old one, then run `easyremote autostart on` (an agent that finds itself replaced on disk also restarts itself the next time a phone connects). `easyremote status` shows the build you have.
 
 ## Agent commands
 
@@ -61,7 +61,7 @@ easyremote devices              list paired phones
 easyremote revoke <id|name|all> remove a phone
 easyremote status               name, address, certificate fingerprint
 easyremote autostart on|off     start at login
-easyremote update [--check]     download + install the newest build, restart the agent
+easyremote update [--apply]     check for a newer build; --apply installs it and restarts the agent
 easyremote audio-debug          (Linux) what the audio system reports, for volume / mute problems
 easyremote host-setup           (Linux) print the one-time setup script: easyremote host-setup | sudo sh
 easyremoted --mock              run without touching the PC (prints events; for testing)
