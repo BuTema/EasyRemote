@@ -14,6 +14,7 @@ pub mod input;
 pub mod pairing;
 pub mod proto;
 pub mod selfupdate;
+pub mod update;
 pub mod server;
 #[cfg(windows)]
 pub mod tray;
